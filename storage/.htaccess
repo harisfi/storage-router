@@ -1,0 +1,7 @@
+# This directory (and everything under it except public/) must never
+# be reachable by URL. On Apache 2.4+:
+Require all denied
+
+# Apache 2.2 fallback (uncomment if the host is on 2.2):
+# Order deny,allow
+# Deny from all
