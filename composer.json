@@ -1,0 +1,23 @@
+{
+    "name": "harisfi/storage-router",
+    "description": "Multi-app, multi-provider (Google Drive + local) encrypted storage router.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*",
+        "ext-sodium": "*",
+        "ext-curl": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Tests\\": "tests/"
+        }
+    }
+}
