@@ -1,0 +1,17 @@
+/vendor/
+!/vendor/.htaccess
+
+/.env
+
+/storage/db/*.sqlite
+/storage/db/*.sqlite-*
+!/storage/db/.gitkeep
+
+/storage/local-backends/*
+!/storage/local-backends/.gitkeep
+
+/storage/keys/*
+!/storage/keys/.gitkeep
+
+/storage/backups/*
+!/storage/backups/.gitkeep
