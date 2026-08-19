@@ -36,7 +36,7 @@ $baseQuery = [];
             $metadataStr = $metadata !== null ? htmlspecialchars(json_encode($metadata, JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') : '';
             ?>
             <tr>
-                <td><?= $when ?></td>
+                <td><time class="local-time" datetime="<?= $when ?>"><?= $when ?></time></td>
                 <td><?= $actor ?></td>
                 <td><span class="badge badge-error" data-tooltip="<?= $action ?>"><?= $actionLabel ?></span></td>
                 <td><code><?= $target ?></code></td>

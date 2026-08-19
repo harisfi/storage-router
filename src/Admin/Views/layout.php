@@ -25,6 +25,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
     <link rel="stylesheet" href="/admin/assets/pico.min.css">
     <link rel="stylesheet" href="/admin/assets/admin.css">
+    <script src="/admin/assets/admin.js" defer></script>
 </head>
 <body class="site-body">
 <nav class="container-fluid">

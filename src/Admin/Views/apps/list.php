@@ -36,7 +36,7 @@ $baseQuery = [];
                 <td><?= $name ?><br><small><code><?= $id ?></code></small></td>
                 <td><span class="badge badge-<?= $status ?>"><?= \App\Support\Format::statusLabel($status) ?></span></td>
                 <td><?= number_format($usage['count']) ?> (<?= \App\Support\Format::humanBytes((int) $usage['bytes']) ?>)</td>
-                <td><?= $created ?></td>
+                <td><time class="local-time" datetime="<?= $created ?>"><?= $created ?></time></td>
                 <td>
                     <a href="/admin/apps/<?= $id ?>/assignments" role="button" class="secondary" data-tooltip="Manage assignments" aria-label="Manage assignments">⚙️</a>
                     <form class="inline-form" method="post" action="/admin/apps/<?= $id ?>/suspend">

@@ -65,7 +65,7 @@ $baseQuery = [
                     <div class="cell-item"><span class="cell-label">App</span> <?= $appName ?></div>
                     <div class="cell-item"><span class="cell-label">Backend</span> <?= $backendLabel ?></div>
                     <div class="cell-item"><span class="cell-label">User</span> <?= $userId !== '' ? $userId : '<em>none</em>' ?></div>
-                    <div class="cell-item"><span class="cell-label">Created</span> <?= $created ?></div>
+                    <div class="cell-item"><span class="cell-label">Created</span> <time class="local-time" datetime="<?= $created ?>"><?= $created ?></time></div>
                 </td>
                 <td>
                     <form class="inline-form" method="post" action="/admin/files/<?= $fid ?>/migrate">
