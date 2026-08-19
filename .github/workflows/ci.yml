@@ -47,3 +47,6 @@ jobs:
 
       - name: Run tests
         run: vendor/bin/phpunit
+
+      - name: Deployment structure checks
+        run: php bin/verify-deployment.php --repo .

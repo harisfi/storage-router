@@ -22,7 +22,7 @@ All notable changes to this project are documented here. This project follows [S
 - Audit log for admin actions, content-level access, and operational failures.
 - Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
 - `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.
-- `bin/verify-deployment.php` automated post-deploy security check.
+- `bin/verify-deployment.php` automated post-deploy security check, plus a `--repo` static mode run in CI so deployment structure is verified on every push.
 
 ### Fixed
 

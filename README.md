@@ -202,7 +202,8 @@ Sign in at `/admin/login`. From the dashboard you can:
 | `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
 | `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + all KEKs (default `storage/backups/`). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
 | `php bin/restore-backup.php <backup.enc> <dir>` | Decrypt a `--encrypt` backup and restore DB + KEKs. |
-| `php bin/verify-deployment.php <base_url>` | Post-deploy security check (see below). |
+| `php bin/verify-deployment.php <base_url>` | Post-deploy security check over HTTP (see below). |
+| `php bin/verify-deployment.php --repo [dir]` | Static/structural checks (guards, gitignore, no tracked secrets, docroot split) — runs in CI. |
 
 ## Deployment
 
@@ -252,10 +253,16 @@ Every sensitive path is protected by deny-all rules. The most important to confi
 - `storage-router/storage/local-backends/` (ciphertext blobs)
 - `storage-router/composer.json`, `storage-router/src/...`, `storage-router/vendor/autoload.php`
 
-Automate this check:
+Automate this check after every deploy:
 
 ```bash
 php bin/verify-deployment.php https://yourdomain.com
+```
+
+To keep the *structural* invariants from depending on human discipline, the same tool runs a static `--repo` check in CI on every push (GitHub Actions: "Deployment structure checks"), failing the build if deny-rule files are missing, secrets are tracked or not gitignored, or a sensitive directory ever lands inside `public/`:
+
+```bash
+php bin/verify-deployment.php --repo .   # repo root containing router-app/
 ```
 
 It makes real HTTP requests, asserts each sensitive path is blocked and the public pipeline works, and exits non-zero on any failure (usable as a CI/deploy check).
