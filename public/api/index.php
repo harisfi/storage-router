@@ -7,6 +7,11 @@ require __DIR__ . '/../../vendor/autoload.php';
 use App\Api\Router;
 use App\Data\Database;
 use App\Support\Config;
+use App\Support\ErrorHandler;
+
+// Sanitized error handling first — before anything that handles keys — so
+// exceptions never dump plaintext DEKs/KEKs into logs (see ErrorHandler).
+ErrorHandler::register(true);
 
 $projectRoot = __DIR__ . '/../../';
 Config::load($projectRoot . '.env');
