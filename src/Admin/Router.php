@@ -130,7 +130,7 @@ final class Router
 
         // --- storage backends ---
         if ($path === '/admin/backends' && $method === 'GET') {
-            $this->storageBackends->list();
+            $this->storageBackends->list($_GET);
             return;
         }
         if ($path === '/admin/backends/add-local' && $method === 'GET') {
@@ -156,7 +156,7 @@ final class Router
 
         // --- apps ---
         if ($path === '/admin/apps' && $method === 'GET') {
-            $this->appsController->list();
+            $this->appsController->list($_GET);
             return;
         }
         if ($path === '/admin/apps/new' && $method === 'GET') {
@@ -190,7 +190,7 @@ final class Router
             return;
         }
         if ($path === '/admin/files/errors' && $method === 'GET') {
-            $this->fileBrowser->errors();
+            $this->fileBrowser->errors($_GET);
             return;
         }
         if (preg_match('#^/admin/files/([^/]+)/migrate$#', $path, $m) === 1 && $method === 'POST') {

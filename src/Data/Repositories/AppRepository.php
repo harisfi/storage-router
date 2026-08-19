@@ -31,9 +31,26 @@ final class AppRepository
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function listAll(): array
+    public function listAll(?int $limit = null, int $offset = 0): array
     {
-        return $this->pdo->query('SELECT * FROM apps ORDER BY created_at DESC')->fetchAll();
+        $sql = 'SELECT * FROM apps ORDER BY created_at DESC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT :limit OFFSET :offset';
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        if ($limit !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        return $stmt->fetchAll();
+    }
+
+    public function countAll(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM apps')->fetchColumn();
     }
 
     public function create(string $id, string $name, string $apiKeyHash, string $kekRef): void

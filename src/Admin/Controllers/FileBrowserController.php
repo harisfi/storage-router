@@ -11,6 +11,7 @@ use App\Data\Repositories\FileRepository;
 use App\Data\Repositories\StorageBackendRepository;
 use App\Storage\StorageProviderRegistry;
 use App\Support\Csrf;
+use App\Support\Pagination;
 use Throwable;
 
 final class FileBrowserController
@@ -34,7 +35,13 @@ final class FileBrowserController
             'mime_type' => is_string($query['mime_type'] ?? null) ? $query['mime_type'] : '',
         ];
 
-        $files = $this->files->listForAdmin(array_filter($filters));
+        $page = max(1, (int) ($query['page'] ?? 1));
+        $perPage = Pagination::normalizePerPage((int) ($query['per_page'] ?? Pagination::DEFAULT_PER_PAGE));
+        $appliedFilters = array_filter($filters);
+
+        $total = $this->files->countForAdmin($appliedFilters);
+        $pagination = new Pagination($total, $page, $perPage);
+        $files = $this->files->listForAdmin($appliedFilters, $pagination->perPage(), $pagination->offset());
         $apps = $this->apps->listAll();
         $backends = $this->backends->listAll();
         $csrfToken = Csrf::token();
@@ -49,7 +56,7 @@ final class FileBrowserController
         }
 
         $pageTitle = 'Files';
-        $content = function () use ($files, $apps, $backends, $appNames, $backendLabels, $filters, $csrfToken): void {
+        $content = function () use ($files, $apps, $backends, $appNames, $backendLabels, $filters, $csrfToken, $pagination): void {
             require __DIR__ . '/../Views/files/browse.php';
         };
         $flash = $_SESSION['_flash'] ?? null;
@@ -58,9 +65,14 @@ final class FileBrowserController
         require __DIR__ . '/../Views/layout.php';
     }
 
-    public function errors(): void
+    public function errors(array $query = []): void
     {
-        $errors = $this->auditLog->listErrors();
+        $page = max(1, (int) ($query['page'] ?? 1));
+        $perPage = Pagination::normalizePerPage((int) ($query['per_page'] ?? Pagination::DEFAULT_PER_PAGE));
+
+        $total = $this->auditLog->countErrors();
+        $pagination = new Pagination($total, $page, $perPage);
+        $errors = $this->auditLog->listErrors($pagination->perPage(), $pagination->offset());
 
         // Resolve actor ids to readable names: app UUIDs → app names,
         // admin ids → usernames (per the audit log's actor_type). Unknown
@@ -83,7 +95,7 @@ final class FileBrowserController
         }
 
         $pageTitle = 'Operational Errors';
-        $content = function () use ($errors, $actorNames): void {
+        $content = function () use ($errors, $actorNames, $pagination): void {
             require __DIR__ . '/../Views/files/errors.php';
         };
         require __DIR__ . '/../Views/layout.php';

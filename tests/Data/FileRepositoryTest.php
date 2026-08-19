@@ -92,4 +92,35 @@ final class FileRepositoryTest extends DatabaseTestCase
         $this->assertSame(2, $repo->countActiveForStorage('backend-1'));
         $this->assertSame(2, $repo->countAllForStorage('backend-1'));
     }
+
+    public function testCountForAdminRespectsFilters(): void
+    {
+        $this->createFile(['app_id' => 'app-1', 'user_id' => 'u1', 'mime_type' => 'text/plain']);
+        $this->createFile(['app_id' => 'app-1', 'user_id' => 'u2', 'mime_type' => 'text/plain']);
+        $this->createFile(['app_id' => 'app-2', 'user_id' => 'u1', 'mime_type' => 'image/png']);
+        $repo = new FileRepository($this->pdo);
+
+        $this->assertSame(3, $repo->countForAdmin([]));
+        $this->assertSame(1, $repo->countForAdmin(['app_id' => 'app-2']));
+        $this->assertSame(1, $repo->countForAdmin(['app_id' => 'app-1', 'user_id' => 'u1']));
+        $this->assertSame(1, $repo->countForAdmin(['mime_type' => 'image/png']));
+    }
+
+    public function testListForAdminPagination(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->createFile(['id' => "file-$i"]);
+        }
+        $repo = new FileRepository($this->pdo);
+
+        $page1 = $repo->listForAdmin([], 2, 0);
+        $page2 = $repo->listForAdmin([], 2, 2);
+        $this->assertCount(2, $page1);
+        $this->assertCount(2, $page2);
+        $this->assertCount(1, $repo->listForAdmin([], 2, 4)); // last page has 1
+
+        $ids1 = array_column($page1, 'id');
+        $ids2 = array_column($page2, 'id');
+        $this->assertNotContains($ids1[0], $ids2);
+    }
 }

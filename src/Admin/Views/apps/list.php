@@ -2,7 +2,9 @@
 /**
  * @var array<int, array<string, mixed>> $apps
  * @var array<string, array{count: int, bytes: int}> $usageByApp
+ * @var \App\Support\Pagination $pagination
  */
+$baseQuery = [];
 ?>
 <p><a href="/admin/apps/new" role="button">+ Create app</a></p>
 
@@ -51,4 +53,5 @@
         </tbody>
     </table>
     </figure>
+    <?php require __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>

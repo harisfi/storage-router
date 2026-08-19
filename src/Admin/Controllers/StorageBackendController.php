@@ -9,6 +9,7 @@ use App\Data\Repositories\FileRepository;
 use App\Data\Repositories\StorageBackendRepository;
 use App\Storage\StorageProviderRegistry;
 use App\Support\Csrf;
+use App\Support\Pagination;
 use App\Support\UuidGenerator;
 use Throwable;
 
@@ -31,11 +32,16 @@ final class StorageBackendController
     ) {
     }
 
-    public function list(): void
+    public function list(array $query = []): void
     {
-        $backends = $this->backends->listAll();
+        $page = max(1, (int) ($query['page'] ?? 1));
+        $perPage = Pagination::normalizePerPage((int) ($query['per_page'] ?? Pagination::DEFAULT_PER_PAGE));
+
+        $pagination = new Pagination($this->backends->countAll(), $page, $perPage);
+        $backends = $this->backends->listAll($pagination->perPage(), $pagination->offset());
+
         $pageTitle = 'Storage Backends';
-        $content = function () use ($backends): void {
+        $content = function () use ($backends, $pagination): void {
             require __DIR__ . '/../Views/backends/list.php';
         };
         $flash = $_SESSION['_flash'] ?? null;

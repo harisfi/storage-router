@@ -22,11 +22,26 @@ final class StorageBackendRepository
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function listAll(): array
+    public function listAll(?int $limit = null, int $offset = 0): array
     {
-        $rows = $this->pdo->query('SELECT * FROM storage_backends ORDER BY created_at DESC')->fetchAll();
+        $sql = 'SELECT * FROM storage_backends ORDER BY created_at DESC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT :limit OFFSET :offset';
+        }
 
-        return array_map([$this, 'decodeConfig'], $rows);
+        $stmt = $this->pdo->prepare($sql);
+        if ($limit !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        return array_map([$this, 'decodeConfig'], $stmt->fetchAll());
+    }
+
+    public function countAll(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM storage_backends')->fetchColumn();
     }
 
     /** @return array<int, array<string, mixed>> */

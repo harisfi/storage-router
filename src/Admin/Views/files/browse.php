@@ -7,8 +7,14 @@
  * @var array<string, string> $backendLabels
  * @var array<string, string> $filters
  * @var string $csrfToken
+ * @var \App\Support\Pagination $pagination
  */
 $csrf = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
+$baseQuery = [
+    'app_id' => $filters['app_id'],
+    'user_id' => $filters['user_id'],
+    'mime_type' => $filters['mime_type'],
+];
 ?>
 <form method="get" action="/admin/files">
     <label>App:
@@ -80,4 +86,5 @@ $csrf = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
         </tbody>
     </table>
     </figure>
+    <?php require __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>

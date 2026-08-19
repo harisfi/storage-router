@@ -1,6 +1,8 @@
 <?php
 /** @var array<int, array<string, mixed>> $errors */
 /** @var array<string, string> $actorNames resolved actor ids → display names */
+/** @var \App\Support\Pagination $pagination */
+$baseQuery = [];
 ?>
 <?php if ($errors === []): ?>
     <p>No operational errors logged.</p>
@@ -44,4 +46,5 @@
         </tbody>
     </table>
     </figure>
+    <?php require __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>

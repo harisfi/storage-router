@@ -149,3 +149,60 @@ body article {
 body h1 { font-size: 1.4rem; }
 body h2 { font-size: 1.2rem; }
 body h3 { font-size: 1.05rem; }
+
+/* ---- Pagination --------------------------------------------------------- */
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+}
+.pagination .per-page label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+}
+.pagination .per-page select {
+    width: auto;
+    padding: 0.2rem 2rem 0.2rem 0.4rem;
+    margin: 0;
+}
+.pagination ul.pager {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    gap: 0.25rem;
+    padding: 0;
+    margin: 0;
+}
+.pagination ul.pager li {
+    margin: 0;
+    padding: 0;
+}
+.pagination ul.pager li a,
+.pagination ul.pager li .current {
+    display: inline-block;
+    min-width: 2rem;
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+    border-radius: 6px;
+    text-decoration: none;
+}
+.pagination ul.pager li .current {
+    background: var(--pico-primary-background, #0172ad);
+    color: var(--pico-primary-inverse, #fff);
+    font-weight: 600;
+}
+.pagination ul.pager li .ellipsis {
+    padding: 0.25rem 0.4rem;
+    opacity: 0.6;
+}
+.pagination .pagination-info {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    white-space: nowrap;
+}

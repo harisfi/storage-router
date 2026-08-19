@@ -1,5 +1,7 @@
 <?php
 /** @var array<int, array<string, mixed>> $backends */
+/** @var \App\Support\Pagination $pagination */
+$baseQuery = [];
 ?>
 <p>
     <a href="/admin/backends/add-local" role="button">+ Add local backend</a>
@@ -62,4 +64,5 @@
         </tbody>
     </table>
     </figure>
+    <?php require __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>

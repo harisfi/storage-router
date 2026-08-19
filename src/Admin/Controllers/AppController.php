@@ -8,6 +8,7 @@ use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\AuditLogRepository;
 use App\Data\Repositories\FileRepository;
 use App\Support\Csrf;
+use App\Support\Pagination;
 use App\Support\UuidGenerator;
 
 final class AppController
@@ -19,16 +20,21 @@ final class AppController
     ) {
     }
 
-    public function list(): void
+    public function list(array $query = []): void
     {
-        $apps = $this->apps->listAll();
+        $page = max(1, (int) ($query['page'] ?? 1));
+        $perPage = Pagination::normalizePerPage((int) ($query['per_page'] ?? Pagination::DEFAULT_PER_PAGE));
+
+        $pagination = new Pagination($this->apps->countAll(), $page, $perPage);
+        $apps = $this->apps->listAll($pagination->perPage(), $pagination->offset());
+
         $usageByApp = [];
         foreach ($apps as $app) {
             $usageByApp[$app['id']] = $this->files->countAndSumForApp((string) $app['id']);
         }
 
         $pageTitle = 'Apps';
-        $content = function () use ($apps, $usageByApp): void {
+        $content = function () use ($apps, $usageByApp, $pagination): void {
             require __DIR__ . '/../Views/apps/list.php';
         };
         $flash = $_SESSION['_flash'] ?? null;

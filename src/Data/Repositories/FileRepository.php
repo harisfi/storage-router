@@ -175,6 +175,25 @@ final class FileRepository
         return ['count' => (int) $row['cnt'], 'bytes' => (int) $row['total']];
     }
 
+    /** Count of active files matching the same filters as listForAdmin(). */
+    public function countForAdmin(array $filters = []): int
+    {
+        $sql = "SELECT COUNT(*) FROM files WHERE status = 'active'";
+        $params = [];
+
+        foreach (['app_id', 'user_id', 'mime_type'] as $field) {
+            if (!empty($filters[$field])) {
+                $sql .= " AND {$field} = :{$field}";
+                $params[":{$field}"] = $filters[$field];
+            }
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     /**
      * Admin file browser: filtered, paginated listing across all
      * apps. $filters may contain app_id, user_id, mime_type (each an exact

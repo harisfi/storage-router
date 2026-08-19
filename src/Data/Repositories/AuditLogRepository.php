@@ -39,13 +39,20 @@ final class AuditLogRepository
         ]);
     }
 
+    /** Count of error rows — supports pagination for the errors view. */
+    public function countErrors(): int
+    {
+        return (int) $this->pdo->query("SELECT COUNT(*) FROM audit_log WHERE status = 'error'")->fetchColumn();
+    }
+
     /** Backs the admin "errors" filter view. */
-    public function listErrors(int $limit = 100): array
+    public function listErrors(int $limit = 100, int $offset = 0): array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT * FROM audit_log WHERE status = 'error' ORDER BY created_at DESC LIMIT :limit"
+            "SELECT * FROM audit_log WHERE status = 'error' ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
         );
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
         return $stmt->fetchAll();
