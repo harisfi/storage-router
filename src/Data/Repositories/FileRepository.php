@@ -120,6 +120,20 @@ final class FileRepository
     }
 
     /**
+     * Irreversibly destroys the stored key material: the wrapped DEK and
+     * stream header are overwritten and the KEK version zeroed. Called FIRST
+     * on delete, so even if the backend's blob delete fails, the leftover
+     * ciphertext is permanently undecryptable (the DEK reference is gone).
+     */
+    public function destroyKeyMaterial(string $fileId): void
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE files SET encrypted_dek = '', stream_header = '', kek_version = 0 WHERE id = :id"
+        );
+        $stmt->execute([':id' => $fileId]);
+    }
+
+    /**
      * Sum of active file sizes on a backend, computed from this table —
  * not a filesystem/API scan. Used by LocalProvider::getQuota() and
  * the admin quota display.

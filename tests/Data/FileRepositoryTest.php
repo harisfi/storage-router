@@ -183,4 +183,25 @@ public function testBackendByteAccounting(): void
         $this->assertSame(1, $repo->countForAppVersion('app-1', 2));       // any-status v2 = 1
         $this->assertSame([1, 2], $repo->distinctKekVersionsForApp('app-1'));
     }
+
+    public function testDestroyKeyMaterialDestroysWrappedDek(): void
+    {
+        $id = $this->createFile();
+        $repo = new FileRepository($this->pdo);
+
+        $row = $repo->findById($id);
+        $this->assertNotEmpty($row['encrypted_dek']);
+        $this->assertNotEmpty($row['stream_header']);
+
+        $repo->destroyKeyMaterial($id);
+
+        $after = $repo->findById($id);
+        $this->assertSame('', $after['encrypted_dek']);
+        $this->assertSame('', $after['stream_header']);
+        $this->assertSame(0, (int) $after['kek_version']);
+
+        // The leftover blob can never be decrypted now — there it is: a
+        // destroyKeyMaterial'd wrapped DEK is unreadable.
+        $this->assertNotEquals($row['encrypted_dek'], $after['encrypted_dek']);
+    }
 }

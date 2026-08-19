@@ -45,6 +45,7 @@ final class Router
         string $googleClientSecret,
         int $rateLimitUploadPerMinute = 30,
         int $rateLimitFilesPerMinute = 120,
+        int $maxUploadBytes = 0,
         string $googleOauthTokenUrl = 'https://oauth2.googleapis.com/token',
         string $googleUserInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo',
         string $googleDriveApiBaseUrl = 'https://www.googleapis.com/drive/v3',
@@ -84,9 +85,10 @@ final class Router
             $providers,
             $selector,
             $keyManager,
-            $encryptor
+            $encryptor,
+            $maxUploadBytes
         );
-        $this->fileController = new FileController($files, $backends, $providers, $keyManager, $encryptor);
+        $this->fileController = new FileController($files, $backends, $providers, $keyManager, $encryptor, $auditLog);
     }
 
     public function dispatch(string $method, string $uri): void

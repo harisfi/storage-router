@@ -156,6 +156,7 @@ Copy `.env.example` to `.env` and set:
 | `ADMIN_SESSION_SECRET` | — | Secret for admin sessions. |
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
 | `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
+| `MAX_UPLOAD_BYTES` | `0` | Max plaintext upload size in bytes (`0` = unlimited). Enforced from the `Content-Length` header *before* encryption and from the actual encrypted size after, so a missing header can't bypass it. |
 | `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
 | `GOOGLE_USERINFO_URL` | real Google | Testing override only. |
 | `GOOGLE_AUTHORIZE_URL` | real Google | Testing override only. |
@@ -183,9 +184,12 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `401` | `unauthorized` | Missing/invalid API key, or app suspended. |
 | `404` | `not_found` | File not found **or not owned by this app** (IDOR protection). |
 | `405` | `invalid_request` | Method not allowed. |
+| `413` | `invalid_request` | Upload exceeds `MAX_UPLOAD_BYTES` (checked before encryption and again after). |
 | `429` | `rate_limited` | Per-app rate limit exceeded (also sends `Retry-After: 60`). |
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
+
+**Download integrity:** a file is fully decrypted and authenticated into a buffer *before* any bytes are sent; if a later chunk fails authentication, the request returns an error and never emits partial plaintext. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable.
 
 ## Admin UI
 
@@ -557,6 +561,7 @@ All notable changes to this project are documented here. This project follows [S
   `delete-kek`, `backup`, `restore-backup`, `verify-deployment`.
 - Strict KEK retention: backups include only referenced KEKs; `bin/delete-kek.php` purges an obsolete (non-current, zero-any-status-reference) version; `bin/prune-keys.php` automates the same gate on a schedule.
 - Operation atomicity: KEK rotation is transactional (all re-wraps + version bump commit/rollback together), and backup/rotation/purge serialize on a shared `storage/ops.lock` so they can never race.
+- Upload hardening: configurable `MAX_UPLOAD_BYTES` enforced before encryption (and confirmed after); downloads are fully decrypted before any bytes are sent (no partial plaintext on failure); deletes destroy the DEK before the blob is removed.
 - Audit log for admin actions, content-level access, and operational failures.
 - Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
 - `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.

@@ -147,6 +147,7 @@ Copy `.env.example` to `.env` and set:
 | `ADMIN_SESSION_SECRET` | — | Secret for admin sessions. |
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
 | `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
+| `MAX_UPLOAD_BYTES` | `0` | Max plaintext upload size in bytes (`0` = unlimited). Enforced from the `Content-Length` header *before* encryption and from the actual encrypted size after, so a missing header can't bypass it. |
 | `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
 | `GOOGLE_USERINFO_URL` | real Google | Testing override only. |
 | `GOOGLE_AUTHORIZE_URL` | real Google | Testing override only. |
@@ -174,9 +175,12 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `401` | `unauthorized` | Missing/invalid API key, or app suspended. |
 | `404` | `not_found` | File not found **or not owned by this app** (IDOR protection). |
 | `405` | `invalid_request` | Method not allowed. |
+| `413` | `invalid_request` | Upload exceeds `MAX_UPLOAD_BYTES` (checked before encryption and again after). |
 | `429` | `rate_limited` | Per-app rate limit exceeded (also sends `Retry-After: 60`). |
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
+
+**Download integrity:** a file is fully decrypted and authenticated into a buffer *before* any bytes are sent; if a later chunk fails authentication, the request returns an error and never emits partial plaintext. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable.
 
 ## Admin UI
 

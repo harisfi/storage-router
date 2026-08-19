@@ -6,6 +6,7 @@ namespace App\Api\Controllers;
 
 use App\Crypto\EnvelopeEncryptor;
 use App\Crypto\KeyManager;
+use App\Data\Repositories\AuditLogRepository;
 use App\Data\Repositories\FileRepository;
 use App\Data\Repositories\StorageBackendRepository;
 use App\Storage\StorageProviderRegistry;
@@ -19,7 +20,8 @@ final class FileController
         private StorageBackendRepository $backends,
         private StorageProviderRegistry $providers,
         private KeyManager $keyManager,
-        private EnvelopeEncryptor $encryptor
+        private EnvelopeEncryptor $encryptor,
+        private AuditLogRepository $auditLog
     ) {
     }
 
@@ -71,30 +73,41 @@ final class FileController
         }
         rewind($cipherBuffer);
 
+        // Decrypt the ENTIRE stream into a buffer and validate it fully
+        // before sending a single byte to the client. If authentication
+        // fails on any chunk, we abort with a clean error and never emit
+        // partial plaintext — a truncated file must not silently reach the
+        // caller with a 200.
+        $clearBuffer = fopen('php://temp/maxmemory:5242880', 'r+b');
+
+        try {
+            $dec = $this->encryptor->decryptStream($dek, $header, $cipherBuffer, $clearBuffer);
+        } catch (Throwable $e) {
+            sodium_memzero($dek);
+            fclose($cipherBuffer);
+            fclose($clearBuffer);
+            ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'File could not be decrypted.');
+        }
+        sodium_memzero($dek);
+        fclose($cipherBuffer);
+
+        // The stored plaintext length and the decrypted length must agree —
+        // a mismatch means the ciphertext or metadata was tampered with.
+        if ((int) $dec['size_bytes'] !== (int) $file['size_bytes']) {
+            fclose($clearBuffer);
+            ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'File integrity check failed.');
+        }
+        rewind($clearBuffer);
+
         header('Content-Type: ' . $file['mime_type']);
         // Never render inline based on sniffed type.
         header('Content-Disposition: attachment; filename="' . $file['id'] . '"');
-        header('Content-Length: ' . $file['size_bytes']); // plaintext size, stored at upload time
+        header('Content-Length: ' . $dec['size_bytes']); // plaintext size, confirmed by decryption
 
         $out = fopen('php://output', 'wb');
-
-        try {
-            // AEAD authentication is checked per chunk before it's written
-            // to $out — corrupted/tampered ciphertext throws here rather
-            // than silently forwarding bad plaintext to the client.
-            $this->encryptor->decryptStream($dek, $header, $cipherBuffer, $out);
-        } catch (Throwable $e) {
-            // Headers (and possibly some already-authenticated plaintext
-            // chunks) may have been sent by this point — there is no clean
-            // way to convert this into a JSON error mid-stream. The
-            // truncated/aborted download is the visible symptom to the
-            // client; the failure itself should still be logged
-            // server-side by the surrounding error handler.
-        } finally {
-            sodium_memzero($dek);
-            fclose($cipherBuffer);
-            fclose($out);
-        }
+        stream_copy_to_stream($clearBuffer, $out);
+        fclose($clearBuffer);
+        fclose($out);
     }
 
     /** @param array<string, mixed> $app authenticated app row */
@@ -102,12 +115,27 @@ final class FileController
     {
         $file = $this->findScoped($app, $fileId);
 
+        // 1) Destroy the stored DEK + stream header first: even if the
+        //    backend blob can't be removed, the leftover ciphertext becomes
+        //    permanently undecryptable — the data is gone the moment the key
+        //    is, regardless of the backend's fate. This also matches the
+        //    "destroy the key first" hardening.
+        $this->files->destroyKeyMaterial($fileId);
+
+        // 2) Best-effort delete of the ciphertext blob. If it fails, the blob
+        //    remains as useless bytes (DEK already destroyed); log it so an
+        //    operator can reclaim the wasted storage. The DB record is still
+        //    marked deleted.
         $backend = $this->backends->findById((string) $file['storage_id']);
         if ($backend !== null) {
-            // Ciphertext deletion needs no decryption — deleting the
-            // opaque blob is all that's required.
-            $provider = $this->providers->forBackend($backend);
-            $provider->delete($backend, (string) $file['provider_ref']);
+            try {
+                $this->providers->forBackend($backend)->delete($backend, (string) $file['provider_ref']);
+            } catch (Throwable $e) {
+                $this->auditLog->log('app', (string) $app['id'], 'file.delete_blob_failed', 'error', $fileId, [
+                    'reason' => 'provider_delete_failed',
+                    'errors' => [['storage_id' => (string) $backend['id'], 'error' => 'delete_failed']],
+                ]);
+            }
         }
 
         $this->files->markDeleted($fileId);

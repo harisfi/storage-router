@@ -28,7 +28,8 @@ final class UploadController
         private StorageProviderRegistry $providers,
         private BackendSelector $selector,
         private KeyManager $keyManager,
-        private EnvelopeEncryptor $encryptor
+        private EnvelopeEncryptor $encryptor,
+        private int $maxUploadBytes = 0
     ) {
     }
 
@@ -59,6 +60,17 @@ final class UploadController
         $mimeType = $_SERVER['CONTENT_TYPE'] ?? 'application/octet-stream';
         $userId = (!empty($_SERVER['HTTP_X_USER_ID'])) ? $_SERVER['HTTP_X_USER_ID'] : null;
 
+        // Validate size BEFORE spending CPU on encryption or bytes on a
+        // backend. The Content-Length header (when present) lets us reject
+        // oversized files up front; the same cap is re-checked against the
+        // actual encrypted size below so a missing header can't bypass it.
+        if ($this->maxUploadBytes > 0) {
+            $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+            if ($contentLength > $this->maxUploadBytes) {
+                ErrorCatalog::respond(413, ErrorCatalog::INVALID_REQUEST, 'File exceeds the maximum allowed size.');
+            }
+        }
+
         // Encryption happens exactly once, regardless of which (or how
         // many) backends are subsequently attempted — the ciphertext
         // doesn't depend on the destination, only the retry loop below does.
@@ -85,6 +97,13 @@ final class UploadController
 
         $plaintextSize = $encResult['size_bytes'];
         $attemptErrors = [];
+
+        // A missing/malicious Content-Length can't bypass the cap: enforce it
+        // again against the actual encrypted plaintext size.
+        if ($this->maxUploadBytes > 0 && $plaintextSize > $this->maxUploadBytes) {
+            fclose($cipherBuffer);
+            ErrorCatalog::respond(413, ErrorCatalog::INVALID_REQUEST, 'File exceeds the maximum allowed size.');
+        }
 
         // Retry against the next eligible backend on failure, rather than
         // failing the whole request on the first backend's error.
