@@ -207,6 +207,34 @@ body h3 { font-size: 1.05rem; }
     white-space: nowrap;
 }
 
+/* ---- Sticky footer ------------------------------------------------------ */
+.site-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+.site-body main {
+    flex: 1 0 auto;
+}
+.site-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.5rem;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    margin-top: 1.5rem;
+    border-top: var(--pico-border-width, 1px) solid var(--pico-muted-border-color, rgba(128, 128, 128, 0.25));
+    font-size: 0.7rem;
+    opacity: 0.9;
+}
+.site-footer .footer-item a {
+    text-decoration: none;
+}
+.site-footer .footer-item a:hover {
+    text-decoration: underline;
+}
 /* ---- Dashboard stat cards ---------------------------------------------- */
 /* Mobile: single column (1×5). */
 .stat-grid {

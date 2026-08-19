@@ -17,8 +17,8 @@
         body > main { max-width: 420px; margin: 10vh auto; }
     </style>
 </head>
-<body>
-    <main>
+<body class="site-body">
+    <main class="container">
         <article>
             <h1>Admin Login</h1>
 
@@ -39,5 +39,18 @@
             </form>
         </article>
     </main>
+    <footer class="site-footer container">
+        <span class="footer-item">
+            Licensed under the <a href="https://github.com/harisfi/storage-router/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </span>
+        <span class="footer-item">
+            Enjoying Storage Router? <a href="https://github.com/harisfi/storage-router" target="_blank" rel="noopener">★ Star it on GitHub</a>
+        </span>
+        <span class="footer-item">
+            <a href="https://github.com/harisfi/storage-router/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contribute</a> ·
+            <a href="https://github.com/harisfi/storage-router/issues/new?labels=enhancement" target="_blank" rel="noopener">Request a feature</a> ·
+            <a href="https://github.com/harisfi/storage-router/issues/new?labels=bug" target="_blank" rel="noopener">Report a bug</a>
+        </span>
+    </footer>
 </body>
 </html>
