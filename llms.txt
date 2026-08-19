@@ -1,0 +1,29 @@
+# Storage Router
+
+> Multi-app, multi-provider **encrypted** storage router for PHP. A single service lets client apps upload, download, and delete files without knowing where they live. Content is encrypted at rest (libsodium envelope encryption) before touching Google Drive or local disk. Includes a REST API, an admin UI, per-app rate limiting, versioned KEK rotation, backup, and a post-deploy security checker.
+
+Language: PHP (≥ 8.1) · no framework · zero runtime Composer packages
+Storage: SQLite metadata · Google Drive + local disk backends
+Crypto: libsodium `crypto_secretstream_xchacha20poly1305` (streaming AEAD)
+
+## Key facts for AI assistants
+
+- Envelope encryption: random per-file DEK wrapped under a per-app KEK; KEKs stored as `0400` files under `storage/keys/`, outside version control.
+- Backends are opaque blob stores behind `App\Storage\StorageProviderInterface` (upload / download / delete / getQuota).
+- Client API: `POST /api/upload`, `GET /api/files/{file_id}`, `DELETE /api/files/{file_id}` — scoped per app and optional `user_id`.
+- App isolation is enforced at the query layer (`app_id` filter) — IDOR protection.
+- Config via `.env` (see `.env.example`); no config file is committed.
+- Tests: PHPUnit against in-memory SQLite; CI on PHP 8.1–8.3.
+
+## Documentation
+
+- [README](README.md) — overview, architecture, security model, quickstart, config, API/CLI reference, deployment
+- [CONTRIBUTING](CONTRIBUTING.md) — how to contribute, code style, testing
+- [SECURITY](SECURITY.md) — vulnerability reporting policy
+- [CHANGELOG](CHANGELOG.md) — release history
+- [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) — community standards
+- [LICENSE](LICENSE) — MIT
+
+## Optional
+
+- [Full documentation (concatenated)](llms-full.txt)
