@@ -56,6 +56,19 @@ final class UploadController
             ErrorCatalog::respond(400, ErrorCatalog::INVALID_REQUEST, 'Could not read request body.');
         }
 
+        // Temporary-disk capacity guard: php://temp buffers spill to the
+        // system temp dir after a few MiB, so a flood of large uploads could
+        // fill it and hurt the whole server, not just this app. Refuse early
+        // while the temp disk still has headroom instead of letting the
+        // spool consume it.
+        if (function_exists('disk_free_space')) {
+            $tempFree = disk_free_space(sys_get_temp_dir());
+            if ($tempFree !== false && $tempFree < 67108864) { // < 64 MiB left
+                fclose($rawInput);
+                ErrorCatalog::respond(507, ErrorCatalog::NO_STORAGE_AVAILABLE, 'Server temporary storage is low; try again shortly.');
+            }
+        }
+
         $fileId = UuidGenerator::generate();
         $mimeType = $_SERVER['CONTENT_TYPE'] ?? 'application/octet-stream';
         $userId = (!empty($_SERVER['HTTP_X_USER_ID'])) ? $_SERVER['HTTP_X_USER_ID'] : null;
@@ -87,7 +100,9 @@ final class UploadController
         $plainBuffer = fopen('php://temp/maxmemory:5242880', 'r+b');
         $bytesRead = 0;
 
-        while (($buf = fread($rawInput, 8192)) !== '') {
+        // Chunked reads (64 KiB) — counting is O(1) per buffer, not
+        // byte-by-byte, so the CPU cost of enforcing the cap is negligible.
+        while (($buf = fread($rawInput, 65536)) !== '') {
             $bytesRead += strlen($buf);
 
             if ($this->maxUploadBytes > 0 && $bytesRead > $this->maxUploadBytes) {
