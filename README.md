@@ -18,7 +18,7 @@ A multi-app, multi-provider **encrypted** storage router. A single PHP service l
 - **Backend selection** — least-used-space first, priority as a manual tie-breaker, with retry-on-failure to the next candidate.
 - **Admin UI** (`/admin/*`) — manage backends, apps, app↔backend assignments, a file browser, and an operational-error view.
 - **Versioned KEK rotation** — re-wrap DEKs without touching file content, and without ever breaking in-flight decryption.
-- **Per-app rate limiting**, a **backup** tool, and a **post-deploy security verification** tool.
+- **Per-app rate limiting**, a **per-IP login throttle** on the admin form, a **backup** tool (with passphrase encryption), and a **post-deploy security verification** tool.
 - **Audit log** of admin actions, content-level access, and every operational failure.
 
 ## Architecture
@@ -87,8 +87,8 @@ These rules matter — they're what stop a leaked file from becoming a full comp
 - **Never commit**: `.env`, `storage/db/*.sqlite`, `storage/keys/*.kek`, `storage/local-backends/*` (all already gitignored). `.env.example` is the only config that belongs in version control.
 - **`storage/keys/`** must be `0700` with each `.kek` file `0400` (created so by `KeyManager`, but confirm on a real deploy).
 - **`storage/`** (and `db/`, `local-backends/`) should be `0700`, not world-readable.
-- **Keep the KEK store and the SQLite DB in separate backups** — together they can decrypt everything; separately, neither is enough.
-- **Point the document root at `public/`** if your host allows it, so `storage/`, `src/`, and `vendor/` sit outside the webroot rather than relying only on `.htaccess` rules.
+- **Keep the KEK store and the SQLite DB in separate backups** — together they can decrypt everything; separately, neither is enough. If you use `bin/backup.php`, prefer `--encrypt` so the combined archive is itself secret; never archive the whole `storage/` directory wholesale.
+- **Point the document root at `public/`** if your host allows it, so `storage/`, `src/`, and `vendor/` sit outside the webroot rather than relying only on `.htaccess` rules. `.htaccess` is **Apache-only** (ignored by Nginx and when `AllowOverride` is off) — see [Deployment](#deployment) for the Nginx equivalent, and run `bin/verify-deployment.php` after every deploy.
 
 ## Requirements
 
@@ -200,7 +200,8 @@ Sign in at `/admin/login`. From the dashboard you can:
 | `php bin/assign-backend.php <app_id> <storage_id> [priority]` | Grant an app access to a backend. |
 | `php bin/refresh-quota.php [storage_id]` | Refresh cached quota (omit to refresh all). |
 | `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
-| `php bin/backup.php [output_dir]` | Snapshot the DB + all KEKs (defaults to `storage/backups/`). |
+| `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + all KEKs (default `storage/backups/`). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
+| `php bin/restore-backup.php <backup.enc> <dir>` | Decrypt a `--encrypt` backup and restore DB + KEKs. |
 | `php bin/verify-deployment.php <base_url>` | Post-deploy security check (see below). |
 
 ## Deployment
@@ -222,6 +223,24 @@ Then:
 3. Confirm `AllowOverride All` is enabled so the deny-all `.htaccess` rules take effect.
 4. Run `php bin/migrate.php`.
 5. **Verify the security-critical paths return `403`** — see below.
+
+> **Important:** `.htaccess` rules are only honored by Apache with `AllowOverride All`. They do **nothing** on **Nginx**, whose equivalent is explicit `location` blocks. If you use Nginx, or you cannot enable overrides, the structural fix is to point the document root at `public/` so `storage/`, `.env`, `src/` and `vendor/` are never web-reachable.
+
+**Nginx** — point `root` at `public/` and add explicit denies as defense-in-depth:
+
+```nginx
+location / {
+    try_files $uri /index.php?$query_string;
+}
+
+# Never serve these, even though they sit outside the docroot.
+location ~ ^/(\.env|storage|src|vendor)(/|$) {
+    deny all;
+}
+location ~ /\.(?!well-known).* {
+    deny all;   # hidden files (.env, .git, …) are never served
+}
+```
 
 ### Post-deploy verification
 
@@ -265,7 +284,19 @@ storage-router/
 
 ## Backup
 
-`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** every current and historical KEK file. Back both up together — either half alone is useless without the other. Store them separately, since together they can decrypt everything.
+`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** every current and historical KEK file. Back both up together — either half alone is useless without the other, since together they can decrypt everything.
+
+Use `--encrypt` to collapse DB + KEKs into a single passphrase-encrypted artifact whose plaintext intermediates are deleted:
+
+```bash
+# encrypt (passphrase from BACKUP_PASSWORD env or an interactive prompt)
+BACKUP_PASSWORD='...' php bin/backup.php --encrypt
+
+# restore
+php bin/restore-backup.php <backup.enc> <restore_dir>
+```
+
+**Treat an unencrypted archive as a secret.** An archive bucket or `storage/` copy that holds the DB *and* the KEKs is the complete master secret — keep it off the server, keep the passphrase separate from the artifacts, and never archive the whole `storage/` directory wholesale into the same location.
 
 ## Testing
 

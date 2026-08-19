@@ -1,6 +1,6 @@
 # Storage Router
 
-> Multi-app, multi-provider **encrypted** storage router for PHP. A single service lets client apps upload, download, and delete files without knowing where they live. Content is encrypted at rest (libsodium envelope encryption) before touching Google Drive or local disk. Includes a REST API, an admin UI, per-app rate limiting, versioned KEK rotation, backup, and a post-deploy security checker.
+> Multi-app, multi-provider **encrypted** storage router for PHP. A single service lets client apps upload, download, and delete files without knowing where they live. Content is encrypted at rest (libsodium envelope encryption) before touching Google Drive or local disk. Includes a REST API, an admin UI, per-app + admin-login rate limiting, versioned KEK rotation, encryptable backups, and a post-deploy security checker.
 
 Language: PHP (≥ 8.1) · no framework · zero runtime Composer packages
 Storage: SQLite metadata · Google Drive + local disk backends
@@ -12,6 +12,8 @@ Crypto: libsodium `crypto_secretstream_xchacha20poly1305` (streaming AEAD)
 - Backends are opaque blob stores behind `App\Storage\StorageProviderInterface` (upload / download / delete / getQuota).
 - Client API: `POST /api/upload`, `GET /api/files/{file_id}`, `DELETE /api/files/{file_id}` — scoped per app and optional `user_id`.
 - App isolation is enforced at the query layer (`app_id` filter) — IDOR protection.
+- `.htaccess` is defense-in-depth only and Apache-specific; the structural control is pointing the docroot at `public/`, with Nginx `deny` blocks documented.
+- Plaintext DEKs/KEKs are wiped with `sodium_memzero()` after use; a per-IP throttle protects the admin login.
 - Config via `.env` (see `.env.example`); no config file is committed.
 - Tests: PHPUnit against in-memory SQLite; CI on PHP 8.1–8.3.
 

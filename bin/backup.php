@@ -6,6 +6,7 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 
 use App\Data\Database;
+use App\Support\BackupCipher;
 use App\Support\Config;
 
 Config::load(__DIR__ . '/../.env');
@@ -17,11 +18,29 @@ $dbPath = str_starts_with($dbPath, '/') ? $dbPath : $projectRoot . $dbPath;
 $keyStorePath = Config::get('KEK_STORE_PATH', 'storage/keys');
 $keyStorePath = str_starts_with($keyStorePath, '/') ? $keyStorePath : $projectRoot . $keyStorePath;
 
-// Usage: php bin/backup.php [output_dir]  (defaults to storage/backups/<timestamp>)
+// Usage:
+//   php bin/backup.php [output_dir] [--encrypt]
+$args = array_slice($argv, 1);
+$encrypt = in_array('--encrypt', $args, true);
+$args = array_values(array_filter($args, static fn ($a) => $a !== '--encrypt'));
+
+// Passphrase: BACKUP_PASSWORD env (e.g. cron) or an interactive prompt.
+$passphrase = (string) (getenv('BACKUP_PASSWORD') ?: '');
+
 $timestamp = date('Ymd-His');
-$outputDir = trim((string) ($argv[1] ?? ''));
+$outputDir = trim((string) ($args[0] ?? ''));
 if ($outputDir === '') {
     $outputDir = rtrim($projectRoot, '/') . '/storage/backups/' . $timestamp;
+}
+
+if ($encrypt && $passphrase === '') {
+    echo 'Enter a passphrase to encrypt the backup: ';
+    $passphrase = (string) fgets(STDIN);
+    $passphrase = rtrim($passphrase, "\r\n");
+    if ($passphrase === '') {
+        fwrite(STDERR, 'A non-empty passphrase is required for --encrypt.' . PHP_EOL);
+        exit(1);
+    }
 }
 
 if (!is_dir($outputDir) && !mkdir($outputDir, 0700, true) && !is_dir($outputDir)) {
@@ -70,7 +89,41 @@ foreach ($keyFiles as $keyFile) {
 }
 
 fwrite(STDOUT, "Copied {$copied} KEK file(s) to: {$keyBackupDir}" . PHP_EOL);
+
+if ($encrypt) {
+    // Collapse DB + KEKs into a single passphrase-encrypted artifact and
+    // remove the plaintext intermediate files — so the backup is itself a
+    // secret, not a plain archive that combines the two decryptable halves.
+    $files = [basename($dbBackupPath) => (string) file_get_contents($dbBackupPath)];
+    foreach ($keyFiles as $keyFile) {
+        $files['keys/' . basename($keyFile)] = (string) file_get_contents($keyFile);
+    }
+
+    $encArtifact = $outputDir . '.backup.enc';
+    file_put_contents($encArtifact, BackupCipher::encrypt($files, $passphrase));
+    chmod($encArtifact, 0600);
+
+    foreach (array_keys($files) as $name) {
+        $plainPath = $outputDir . '/' . $name;
+        if (is_file($plainPath)) {
+            unlink($plainPath);
+        }
+    }
+    @rmdir($keyBackupDir);
+
+    fwrite(STDOUT, 'Backup written (encrypted): ' . $encArtifact . PHP_EOL);
+} else {
+    fwrite(STDOUT, 'Backup written (plaintext): ' . $outputDir . PHP_EOL);
+}
+
 fwrite(STDOUT, PHP_EOL);
-fwrite(STDOUT, "Backup complete: {$outputDir}" . PHP_EOL);
-fwrite(STDOUT, "Store this OFF this server — a backup sitting next to the live deployment" . PHP_EOL);
-fwrite(STDOUT, "protects against nothing if the whole server is lost or compromised." . PHP_EOL);
+fwrite(STDOUT, 'Store this OFF this server — a backup sitting next to the live deployment' . PHP_EOL);
+fwrite(STDOUT, 'protects against nothing if the whole server is lost or compromised.' . PHP_EOL);
+
+if ($encrypt) {
+    fwrite(STDOUT, 'This artifact contains BOTH the database and the KEKs — keep the passphrase' . PHP_EOL);
+    fwrite(STDOUT, 'separate from the file, or a stolen backup still decrypts everything.' . PHP_EOL);
+} else {
+    fwrite(STDOUT, 'Plaintext mode combines the DB + KEKs: archive it separately from any' . PHP_EOL);
+    fwrite(STDOUT, 'copy of storage/ and protect it as a secret (or re-run with --encrypt).' . PHP_EOL);
+}

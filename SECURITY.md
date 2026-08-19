@@ -20,9 +20,10 @@ Things we care about most, in priority order:
 
 1. **Encryption and key management** — KEK/DEK handling, nonce misuse, key-rotation correctness, and the KEK/DB separation rule.
 2. **App isolation / access control** — any way an app (or `user_id`) can read, write, or delete another's files.
-3. **Secret handling** — `.env`, KEK files, OAuth refresh tokens, API keys at rest or in logs.
-4. **The local-backend capacity check** — the TOCTOU-safe transaction that enforces per-backend caps.
-5. **Path traversal / injection** — PDO-prepared statements and local-backend path validation.
+3. **Secret handling** — `.env`, KEK files, OAuth refresh tokens, API keys at rest or in logs, and whether the backup/restore path (`bin/backup.php --encrypt`, `BackupCipher`) leaks plaintext.
+4. **Auth hardening** — the per-IP admin-login throttle and per-app API rate limiting.
+5. **The local-backend capacity check** — the TOCTOU-safe transaction that enforces per-backend caps.
+6. **Path traversal / injection** — PDO-prepared statements, local-backend path validation, and verified access from outside the webroot (`.htaccess`/Nginx `deny` rules).
 
 ## Supported versions
 

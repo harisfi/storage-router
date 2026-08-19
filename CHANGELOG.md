@@ -15,11 +15,19 @@ All notable changes to this project are documented here. This project follows [S
 - Storage backends: Google Drive (REST OAuth2) and local disk, behind a common provider interface.
 - Least-used-space backend selection with priority tie-break and retry-on-failure.
 - Admin UI: storage backends, apps, app↔backend assignments, file browser, error view.
-- Per-app rate limiting (fixed 60-second window) on upload and file endpoints.
+- Per-app rate limiting (fixed 60-second window) on upload and file endpoints, plus an IP-based throttle on the admin login form.
 - CLI tools: `migrate`, `create-admin`, `create-app`, `create-local-backend`,
   `list-storage-backends`, `assign-backend`, `refresh-quota`, `rotate-kek`,
-  `backup`, `verify-deployment`.
+  `backup`, `restore-backup`, `verify-deployment`.
 - Audit log for admin actions, content-level access, and operational failures.
-- Deny-all `.htaccess` protection for sensitive paths (shared-hosting layout).
-- `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`.
+- Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
+- `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.
 - `bin/verify-deployment.php` automated post-deploy security check.
+
+### Fixed
+
+- `EnvelopeEncryptor` now emits a `TAG_FINAL` for files whose size is an exact multiple of the streaming chunk size (previously they could not be decrypted); covered by `testRoundTripExactlyOneChunk`.
+
+### Security
+
+- Plaintext DEKs/KEKs are wiped with `sodium_memzero()` after use in both the upload and download paths, and inside the encryptor on decrypt.

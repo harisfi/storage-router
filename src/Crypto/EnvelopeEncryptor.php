@@ -156,6 +156,12 @@ final class EnvelopeEncryptor
             throw new RuntimeException('Ciphertext stream ended unexpectedly (missing final chunk).');
         }
 
+        // Wipe this copy of the plaintext DEK regardless of whether the
+        // caller also does, so the key's in-memory lifetime is minimized
+        // at this layer too. (PHP passes strings by value, so the caller's
+        // own variable is separate and must be wiped there as well.)
+        sodium_memzero($dek);
+
         return [
             'size_bytes' => $totalBytes,
             'checksum' => hash_final($hashContext),
