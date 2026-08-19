@@ -9,7 +9,7 @@ Crypto: libsodium `crypto_secretstream_xchacha20poly1305` (streaming AEAD)
 ## Key facts for AI assistants
 
 - Envelope encryption: random per-file DEK wrapped under a per-app KEK; KEKs stored as `0400` files under `storage/keys/`, outside version control.
-- Backends are opaque blob stores behind `App\Storage\StorageProviderInterface` (upload / download / delete / getQuota).
+- Backends are opaque blob stores behind `App\Storage\StorageProviderInterface` (upload / download / delete / getQuota) — **strictly dependent on the router**: the SQLite DB holds the wrapped DEKs and is mandatory for decryption, so backend ciphertext is never independently decryptable.
 - Client API: `POST /api/upload`, `GET /api/files/{file_id}`, `DELETE /api/files/{file_id}` — scoped per app and optional `user_id`.
 - App isolation is enforced at the query layer (`app_id` filter) — IDOR protection.
 - `.htaccess` is defense-in-depth only and Apache-specific; the structural control is pointing the docroot at `public/`, with Nginx `deny` blocks documented.

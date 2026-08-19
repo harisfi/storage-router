@@ -34,7 +34,7 @@ flowchart TD
     ADMIN[Admin /admin] --> ROUTER
 
     ROUTER["Router
-    • API-key auth + rate limiting
+    • API-key auth + optional opt-in rate limiting
     • Backend selection
     • Encrypt / decrypt (streaming)
     • Metadata DB access"] --> SPI
@@ -53,7 +53,9 @@ flowchart TD
     sharded local disk] --> DB
 ```
 
-**Key idea:** the router is the single source of truth for file location and metadata. Drive accounts and local paths are interchangeable, encrypted blob stores.
+**Key idea:** the router is the single source of truth for file location, metadata, and — crucially — the wrapped Data Encryption Keys. Drive accounts and local paths are **not** independent encrypted stores: they hold opaque ciphertext only, and the router's SQLite database is **mandatory for decryption**. Without the database (its wrapped DEKs and per-app KEKs), the files in the backends are mathematically useless. Backends are strictly dependent on the router, never self-contained or standalone-decryptable.
+
+**Traffic control is edge-first:** raw rate limiting/DoS is the reverse proxy's job (Nginx `limit_req`/CDN). The router's internal per-app limiter is **optional and off by default** — it exists only for deployments with no proxy and writes nothing to the database while disabled.
 
 ## Security model
 
@@ -319,7 +321,7 @@ storage-router/
 
 ## Backup
 
-`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** only the KEKs the live database actually needs — each app's current KEK version and any version still referenced by an active file. Obsolete historical keys with zero active references are deliberately excluded, so an old backup can't widen the blast radius by carrying keys for data that is no longer reachable.
+`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** only the KEKs the database actually needs — each app's current KEK version and any version still referenced by **any file of any status** (active or soft-deleted). Obsolete historical keys with zero references are deliberately excluded, so a backup can't widen the blast radius by carrying keys for data that is no longer reachable. It does **not** include every historical KEK.
 
 Use `--encrypt` to collapse DB + the needed KEKs into a single passphrase-encrypted artifact whose plaintext intermediates are deleted:
 
