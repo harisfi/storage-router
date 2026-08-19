@@ -180,7 +180,7 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
 
-**Download integrity:** a file is fully decrypted and authenticated into a buffer *before* any bytes are sent; if a later chunk fails authentication, the request returns an error and never emits partial plaintext. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable.
+**Download:** streams decrypted bytes to the caller with per-chunk AEAD authentication and the exact `Content-Length` sent up front — a mid-stream failure aborts the transfer, which the client detects as truncation (fewer bytes than advertised) rather than receiving a silent short-but-valid file. **Upload size:** the cap is enforced by **counting actual bytes read** from the request body, so a spoofed `Content-Length` can't bypass it. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable. Memory stays bounded (everything streams through `php://temp` with a 5 MiB in-RAM cap, spilling to a temp file for large files).
 
 ## Admin UI
 

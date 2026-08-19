@@ -60,10 +60,10 @@ final class UploadController
         $mimeType = $_SERVER['CONTENT_TYPE'] ?? 'application/octet-stream';
         $userId = (!empty($_SERVER['HTTP_X_USER_ID'])) ? $_SERVER['HTTP_X_USER_ID'] : null;
 
-        // Validate size BEFORE spending CPU on encryption or bytes on a
-        // backend. The Content-Length header (when present) lets us reject
-        // oversized files up front; the same cap is re-checked against the
-        // actual encrypted size below so a missing header can't bypass it.
+        // Fast-path reject on a large advertised Content-Length (saves even
+        // attempting to read). The authoritative safeguard is the actual
+        // byte count enforced while reading php://input below — a spoofed
+        // header can't bypass it.
         if ($this->maxUploadBytes > 0) {
             $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
             if ($contentLength > $this->maxUploadBytes) {
@@ -80,14 +80,36 @@ final class UploadController
             ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'Could not allocate encryption buffer.');
         }
 
+        // Count the ACTUAL bytes read from php://input, not the client's
+        // Content-Length. A spoofed header can't bypass the cap: once the
+        // byte count exceeds the limit we stop reading and reject, without
+        // encrypting or spending more I/O on the attacker's stream.
+        $plainBuffer = fopen('php://temp/maxmemory:5242880', 'r+b');
+        $bytesRead = 0;
+
+        while (($buf = fread($rawInput, 8192)) !== '') {
+            $bytesRead += strlen($buf);
+
+            if ($this->maxUploadBytes > 0 && $bytesRead > $this->maxUploadBytes) {
+                fclose($rawInput);
+                fclose($cipherBuffer);
+                fclose($plainBuffer);
+                ErrorCatalog::respond(413, ErrorCatalog::INVALID_REQUEST, 'File exceeds the maximum allowed size.');
+            }
+
+            fwrite($plainBuffer, $buf);
+        }
+        rewind($plainBuffer);
+        fclose($rawInput);
+
         try {
-            $encResult = $this->encryptor->encryptStream($rawInput, $cipherBuffer);
+            $encResult = $this->encryptor->encryptStream($plainBuffer, $cipherBuffer);
         } catch (Throwable $e) {
-            fclose($rawInput);
+            fclose($plainBuffer);
             fclose($cipherBuffer);
             ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'Encryption failed.');
         }
-        fclose($rawInput);
+        fclose($plainBuffer);
 
         $kekVersion = (int) ($app['kek_version'] ?? 1);
         $kek = $this->keyManager->getOrCreateKek((string) $app['kek_ref'], $kekVersion);

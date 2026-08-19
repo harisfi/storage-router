@@ -21,7 +21,7 @@ All notable changes to this project are documented here. This project follows [S
   `delete-kek`, `backup`, `restore-backup`, `verify-deployment`.
 - Strict KEK retention: backups include only referenced KEKs; `bin/delete-kek.php` purges an obsolete (non-current, zero-any-status-reference) version; `bin/prune-keys.php` automates the same gate on a schedule.
 - Operation atomicity: KEK rotation is transactional (all re-wraps + version bump commit/rollback together), and backup/rotation/purge serialize on a shared `storage/ops.lock` so they can never race.
-- Upload hardening: configurable `MAX_UPLOAD_BYTES` enforced before encryption (and confirmed after); downloads are fully decrypted before any bytes are sent (no partial plaintext on failure); deletes destroy the DEK before the blob is removed.
+- Upload hardening: configurable `MAX_UPLOAD_BYTES` enforced by **counting actual bytes** read from the body (spoofed `Content-Length` can't bypass it); downloads stream with per-chunk authentication and an upfront `Content-Length` so truncation is always detectable; deletes destroy the DEK before the blob is removed. Memory is bounded via `php://temp` (5 MiB RAM cap, temp-file spill).
 - Audit log for admin actions, content-level access, and operational failures.
 - Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
 - `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.

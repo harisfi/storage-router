@@ -73,41 +73,32 @@ final class FileController
         }
         rewind($cipherBuffer);
 
-        // Decrypt the ENTIRE stream into a buffer and validate it fully
-        // before sending a single byte to the client. If authentication
-        // fails on any chunk, we abort with a clean error and never emit
-        // partial plaintext — a truncated file must not silently reach the
-        // caller with a 200.
-        $clearBuffer = fopen('php://temp/maxmemory:5242880', 'r+b');
-
-        try {
-            $dec = $this->encryptor->decryptStream($dek, $header, $cipherBuffer, $clearBuffer);
-        } catch (Throwable $e) {
-            sodium_memzero($dek);
-            fclose($cipherBuffer);
-            fclose($clearBuffer);
-            ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'File could not be decrypted.');
-        }
-        sodium_memzero($dek);
-        fclose($cipherBuffer);
-
-        // The stored plaintext length and the decrypted length must agree —
-        // a mismatch means the ciphertext or metadata was tampered with.
-        if ((int) $dec['size_bytes'] !== (int) $file['size_bytes']) {
-            fclose($clearBuffer);
-            ErrorCatalog::respond(500, ErrorCatalog::INTERNAL_ERROR, 'File integrity check failed.');
-        }
-        rewind($clearBuffer);
-
+        // True streaming to the client with AEAD authentication per chunk.
+        // Each chunk is authenticated before it is written; if a later chunk
+        // fails, the response is aborted. We send the exact Content-Length
+        // (stored plaintext size up front) so the client can always DETECT a
+        // truncated/aborted transfer — it never receives a silent 200 with a
+        // short-but-"valid" file. No full-plaintext buffer is held in memory
+        // or on disk; the only spool is the ciphertext php://temp, which caps
+        // RAM at 5 MiB and spills to a temp file for large files.
         header('Content-Type: ' . $file['mime_type']);
-        // Never render inline based on sniffed type.
         header('Content-Disposition: attachment; filename="' . $file['id'] . '"');
-        header('Content-Length: ' . $dec['size_bytes']); // plaintext size, confirmed by decryption
+        header('Content-Length: ' . $file['size_bytes']);
 
         $out = fopen('php://output', 'wb');
-        stream_copy_to_stream($clearBuffer, $out);
-        fclose($clearBuffer);
-        fclose($out);
+        try {
+            $this->encryptor->decryptStream($dek, $header, $cipherBuffer, $out);
+        } catch (Throwable $e) {
+            // Abort the transfer mid-stream: the client already has fewer
+            // bytes than Content-Length advertised, so it detects truncation
+            // rather than treating the file as valid. Nothing beyond the
+            // authenticated per-chunk plaintext has leaked — that plaintext
+            // is the caller's own, already-authorized file.
+        } finally {
+            sodium_memzero($dek);
+            fclose($cipherBuffer);
+            fclose($out);
+        }
     }
 
     /** @param array<string, mixed> $app authenticated app row */
