@@ -200,8 +200,9 @@ Sign in at `/admin/login`. From the dashboard you can:
 | `php bin/assign-backend.php <app_id> <storage_id> [priority]` | Grant an app access to a backend. |
 | `php bin/refresh-quota.php [storage_id]` | Refresh cached quota (omit to refresh all). |
 | `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
-| `php bin/delete-kek.php <app_id> <version>` | Purge an obsolete historical KEK version (refuses if any active file still references it). |
-| `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + all KEKs (default `storage/backups/`). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
+| `php bin/delete-kek.php <app_id> <version>` | Purge an obsolete historical KEK version (refuses if any file of any status still references it). |
+| `php bin/prune-keys.php` | Scheduled: destroy every obsolete KEK version across all apps (same gate as delete-kek; exit≠0 on failure for alerting). |
+| `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + only the KEKs the live DB needs (never interleaves with rotation/purge). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
 | `php bin/restore-backup.php <backup.enc> <dir>` | Decrypt a `--encrypt` backup and restore DB + KEKs. |
 | `php bin/verify-deployment.php <base_url>` | Post-deploy security check over HTTP (see below). |
 | `php bin/verify-deployment.php --repo [dir]` | Static/structural checks (guards, gitignore, no tracked secrets, docroot split) — runs in CI. |
@@ -308,17 +309,33 @@ php bin/restore-backup.php <backup.enc> <restore_dir>
 
 ## KEK retention
 
-Rotating an app's KEK (`bin/rotate-kek.php`) re-wraps every active DEK under a new version; the old key becomes obsolete for data that matters. Historical versions are removed with a **strict, gated purge**:
+Rotating an app's KEK (`bin/rotate-kek.php`) re-wraps every active DEK under a new version; the old key becomes obsolete once nothing references it. Historical versions are removed with a **strict, gated purge**:
 
 ```bash
+# manual, explicit
 php bin/delete-kek.php <app_id> <version>
+
+# automated (scheduled), destroys every obsolete version across all apps
+php bin/prune-keys.php
 ```
 
-`delete-kek.php` refuses to run unless:
-- the version is **below** the app's current KEK version (you can never delete the key in use), and
-- **no active file** is still wrapped under it.
+Both use the **same gate**: a KEK is destroyed only if it is (a) **below** the app's current version (the live key is never removed) and (b) referenced by **no file of any status** — including soft-deleted files, matching permanent-deletion semantics. Deleting a key while any file still references it would make that file permanently undecryptable, so the gate refuses.
 
-This is the documented destruction policy: a historical KEK is destroyed once all active files have been re-wrapped to a newer version. Purge obsolete keys *after* the rotation that orphaned them so new backups carry only the keys that can still decrypt active data.
+**Do not rely on operator memory** — run prune-keys on a schedule:
+
+```cron
+0 2 * * *  /usr/bin/php /path/to/router-app/bin/prune-keys.php  >> /var/log/storage-router-prune.log 2>&1
+```
+
+`prune-keys.php` exits non-zero if **any** deletion fails, so a monitoring/alerting wrapper around `$?` or the exit code catches problems immediately.
+
+## Operation atomicity & locking
+
+`backup`, `rotate-kek`, `delete-kek`, and `prune-keys` all take a shared exclusive lock (`storage/ops.lock`) and run **mutually exclusive**:
+
+- **Rotation is transactional.** All per-file DEK re-wraps and the app's version bump commit in one SQLite transaction; any failure rolls back completely, so the app is never left half on the old version and half on the new, and the operation can simply be re-run.
+- **Backup cannot race rotation/purge.** Because they serialize on the same lock, a backup's DB snapshot and its KEK copy always describe the same state — it never captures "new KEK but not all re-wrapped DEKs" or an old key mid-deletion.
+- A concurrent run fails fast with "another storage operation is in progress" instead of corrupting the pairing.
 
 ## Testing
 
@@ -335,7 +352,7 @@ Coverage is focused on the highest-stakes code: `Crypto/` (encryption), `Storage
 
 - **API surface** — currently upload / download / delete. Listing, overwrite (`PUT`), and metadata endpoints are not implemented.
 - **Quota refresh** — manual only; no scheduled/cron refresh.
-- **KEK deletion** — manual and gated via `bin/delete-kek.php` (only obsolete versions below the current one with zero active references), never automated or session-triggered.
+- **KEK deletion** — gated and scriptable (`delete-kek.php` manual, `prune-keys.php` scheduled); always refuses to touch a live or still-referenced version, never session-triggered.
 - **Providers** — Google Drive and local disk only. S3/others can be added behind `StorageProviderInterface`.
 
 ## License

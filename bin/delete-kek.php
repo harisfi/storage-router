@@ -10,6 +10,7 @@ use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\AuditLogRepository;
 use App\Data\Repositories\FileRepository;
 use App\Support\Config;
+use App\Support\OpsLock;
 
 Config::load(__DIR__ . '/../.env');
 
@@ -19,6 +20,13 @@ $dbPath = str_starts_with($dbPath, '/') ? $dbPath : $projectRoot . $dbPath;
 
 $keyStorePath = Config::get('KEK_STORE_PATH', 'storage/keys');
 $keyStorePath = str_starts_with($keyStorePath, '/') ? $keyStorePath : $projectRoot . $keyStorePath;
+
+try {
+    OpsLock::acquire(rtrim($projectRoot, '/') . '/storage/ops.lock', 'KEK deletion');
+} catch (\Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    exit(1);
+}
 
 // Usage: php bin/delete-kek.php <app_id> <version>
 $appId = trim((string) ($argv[1] ?? ''));
@@ -49,12 +57,14 @@ $currentVersion = (int) $app['kek_version'];
 // undecryptable.
 if ($version >= $currentVersion) {
     fwrite(STDERR, "Refusing to delete KEK v{$version}: it is not below the app's current version (v{$currentVersion})." . PHP_EOL);
+    OpsLock::release();
     exit(1);
 }
 
-$referenced = $files->countActiveForAppVersion($appId, $version);
+$referenced = $files->countForAppVersion($appId, $version); // ANY status — matches permanent deletion
 if ($referenced > 0) {
-    fwrite(STDERR, "Refusing to delete KEK v{$version}: {$referenced} active file(s) are still wrapped under it. Rotate and re-wrap them first (bin/rotate-kek.php)." . PHP_EOL);
+    fwrite(STDERR, "Refusing to delete KEK v{$version}: {$referenced} file(s) of any status (including soft-deleted) are still wrapped under it. Re-wrap active ones with bin/rotate-kek.php; permanently delete the rest before purging this key." . PHP_EOL);
+    OpsLock::release();
     exit(1);
 }
 
@@ -62,6 +72,7 @@ $target = rtrim($keyStorePath, '/') . '/' . $kekRef . $suffix . '.kek'; // {ref}
 
 if (!is_file($target)) {
     fwrite(STDERR, "Key file not found: {$target}" . PHP_EOL);
+    OpsLock::release();
     exit(1);
 }
 
@@ -72,11 +83,13 @@ $auditLog->log('admin', 'cli:delete-kek', 'kek.delete', 'success', $appId, [
 ]);
 
 if (unlink($target)) {
+    OpsLock::release();
     fwrite(STDOUT, "Deleted historical KEK v{$version} for app '{$app['name']}' ({$appId}): {$target}" . PHP_EOL);
-    fwrite(STDOUT, 'No active file referenced this version, so no data is lost. Ensure a recent backup' . PHP_EOL);
-    fwrite(STDOUT, 'exists whose DB was produced AFTER the relevant rotation re-wrapped all files.' . PHP_EOL);
+    fwrite(STDOUT, 'No file of any status referenced this version, so no data is lost.' . PHP_EOL);
+    fwrite(STDOUT, 'Ensure a recent backup exists whose DB was produced AFTER the relevant rotation.' . PHP_EOL);
     exit(0);
 }
 
+OpsLock::release();
 fwrite(STDERR, "Failed to delete key file: {$target}" . PHP_EOL);
 exit(1);

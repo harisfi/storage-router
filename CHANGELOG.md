@@ -19,7 +19,8 @@ All notable changes to this project are documented here. This project follows [S
 - CLI tools: `migrate`, `create-admin`, `create-app`, `create-local-backend`,
   `list-storage-backends`, `assign-backend`, `refresh-quota`, `rotate-kek`,
   `delete-kek`, `backup`, `restore-backup`, `verify-deployment`.
-- Strict KEK retention: backups include only actively-referenced KEKs, and `bin/delete-kek.php` purges obsolete historical versions (gated on "not current" and "no active file references").
+- Strict KEK retention: backups include only referenced KEKs; `bin/delete-kek.php` purges an obsolete (non-current, zero-any-status-reference) version; `bin/prune-keys.php` automates the same gate on a schedule.
+- Operation atomicity: KEK rotation is transactional (all re-wraps + version bump commit/rollback together), and backup/rotation/purge serialize on a shared `storage/ops.lock` so they can never race.
 - Audit log for admin actions, content-level access, and operational failures.
 - Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
 - `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.

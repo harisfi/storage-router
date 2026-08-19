@@ -192,11 +192,37 @@ final class FileRepository
         return (int) $stmt->fetchColumn();
     }
 
+    /**
+     * Number of files of ANY status wrapped under a KEK version. Used to
+     * gate KEK deletion: a key must remain as long as any file — including
+     * a soft-deleted one — still references it, until permanent purge.
+     */
+    public function countForAppVersion(string $appId, int $kekVersion): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM files WHERE app_id = :app_id AND kek_version = :v'
+        );
+        $stmt->execute([':app_id' => $appId, ':v' => $kekVersion]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     /** @return list<int> KEK versions still referenced by this app's active files. */
     public function distinctActiveKekVersionsForApp(string $appId): array
     {
         $stmt = $this->pdo->prepare(
             "SELECT DISTINCT kek_version FROM files WHERE app_id = :app_id AND status = 'active' ORDER BY kek_version"
+        );
+        $stmt->execute([':app_id' => $appId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** @return list<int> KEK versions referenced by any file (active or soft-deleted). */
+    public function distinctKekVersionsForApp(string $appId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT DISTINCT kek_version FROM files WHERE app_id = :app_id ORDER BY kek_version'
         );
         $stmt->execute([':app_id' => $appId]);
 

@@ -10,10 +10,21 @@ use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\FileRepository;
 use App\Support\BackupCipher;
 use App\Support\Config;
+use App\Support\OpsLock;
 
 Config::load(__DIR__ . '/../.env');
 
 $projectRoot = __DIR__ . '/../';
+
+// A backup must never overlap a KEK rotation or purge (it could capture the
+// new KEK but miss re-wrapped DEKs, or an old key mid-deletion). Serialize
+// all three through the shared ops lock.
+try {
+    OpsLock::acquire($projectRoot . 'storage/ops.lock', 'Backup');
+} catch (\Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    exit(1);
+}
 $dbPath = Config::get('DB_PATH', 'storage/db/router.sqlite');
 $dbPath = str_starts_with($dbPath, '/') ? $dbPath : $projectRoot . $dbPath;
 
@@ -67,12 +78,12 @@ try {
     exit(1);
 }
 
-// --- KEK store: back up only the keys the LIVE database actually needs
-// (each app's current KEK version plus any version still referenced by an
-// ACTIVE file). Obsolete historical keys with zero active references are
-// deliberately excluded, so a backup never widens the blast radius by
-// carrying keys for data that is no longer reachable; purge those
-// explicitly with bin/delete-kek.php after rotating.
+// --- KEK store: back up only the keys the LIVE database actually needs —
+// each app's current KEK version plus any version referenced by ANY file of
+// ANY status (active or soft-deleted). A key must remain (and be backed up)
+// as long as a file still references it, so a backup can always decrypt
+// everything recorded in its own DB snapshot. Nobody is incremented by
+// carrying keys for versions with zero references.
 $apps = new AppRepository($pdo);
 $files = new FileRepository($pdo);
 
@@ -81,7 +92,7 @@ foreach ($apps->listAll() as $app) {
     $ref = (string) $app['kek_ref'];
     $versions = array_unique(array_merge(
         [(int) $app['kek_version']],
-        $files->distinctActiveKekVersionsForApp((string) $app['id'])
+        $files->distinctKekVersionsForApp((string) $app['id'])
     ));
 
     foreach ($versions as $version) {

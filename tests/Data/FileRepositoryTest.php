@@ -155,4 +155,32 @@ public function testBackendByteAccounting(): void
         // app-2 references nothing.
         $this->assertSame([], $repo->distinctActiveKekVersionsForApp('app-2'));
     }
+
+    public function testAnyStatusKekVersionGatingIncludesSoftDeleted(): void
+    {
+        $this->createFile(['app_id' => 'app-1', 'kek_version' => 1]);
+        $repo = new FileRepository($this->pdo);
+        $softDeletedId = 'file-' . bin2hex(random_bytes(6));
+        $repo->create([
+            'id' => $softDeletedId,
+            'app_id' => 'app-1',
+            'user_id' => null,
+            'storage_id' => 'backend-1',
+            'provider_ref' => 'ref',
+            'encrypted_dek' => base64_encode('w'),
+            'stream_header' => base64_encode('h'),
+            'size_bytes' => 5,
+            'mime_type' => 'text/plain',
+            'checksum_plaintext' => 'c',
+            'kek_version' => 2,
+        ]);
+        $repo->markDeleted($softDeletedId);
+
+        // The soft-deleted v2 file must still count as a reference so the
+        // key can't be purged while any (even deleted) file needs it.
+        $this->assertSame(1, $repo->countActiveForAppVersion('app-1', 1));
+        $this->assertSame(0, $repo->countActiveForAppVersion('app-1', 2)); // active v2 = 0
+        $this->assertSame(1, $repo->countForAppVersion('app-1', 2));       // any-status v2 = 1
+        $this->assertSame([1, 2], $repo->distinctKekVersionsForApp('app-1'));
+    }
 }

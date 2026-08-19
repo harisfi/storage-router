@@ -10,6 +10,7 @@ use App\Data\Database;
 use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\FileRepository;
 use App\Support\Config;
+use App\Support\OpsLock;
 
 Config::load(__DIR__ . '/../.env');
 
@@ -19,6 +20,15 @@ $dbPath = str_starts_with($dbPath, '/') ? $dbPath : $projectRoot . $dbPath;
 
 $keyStorePath = Config::get('KEK_STORE_PATH', 'storage/keys');
 $keyStorePath = str_starts_with($keyStorePath, '/') ? $keyStorePath : $projectRoot . $keyStorePath;
+
+// Rotations and backups must never interleave (a backup could capture the
+// new KEK but not all re-wrapped DEKs). Serialize via the shared ops lock.
+try {
+    OpsLock::acquire(rtrim($projectRoot, '/') . '/storage/ops.lock', 'KEK rotation');
+} catch (\Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    exit(1);
+}
 
 $pdo = Database::connect($dbPath);
 $apps = new AppRepository($pdo);
@@ -53,22 +63,23 @@ $newKek = $keyManager->getOrCreateKek($kekRef, $newVersion);
 $activeFiles = $files->listAllActiveForApp($appId);
 $rewrapped = 0;
 $skipped = 0;
-$failed = 0;
 
-foreach ($activeFiles as $file) {
-    $fileVersion = (int) $file['kek_version'];
+// Atomic bulk re-wrap: all per-file DEK re-wraps AND the app's version bump
+// commit as one transaction. If any file fails, everything rolls back — no
+// file ends up on the new version — so the app is never left in a mixed
+// old/new state and the operation can simply be re-run from scratch.
+$pdo->beginTransaction();
 
-    if ($fileVersion === $newVersion) {
-        // Already on the target version somehow (e.g. a re-run) — nothing to do.
-        $skipped++;
-        continue;
-    }
+try {
+    foreach ($activeFiles as $file) {
+        $fileVersion = (int) $file['kek_version'];
 
-    try {
-        // A file might already be behind by more than one rotation if
-        // this script wasn't run after a prior bump — always unwrap with
-        // the KEK version that actually wrapped ITS DEK, not assumed to
-        // be $oldVersion.
+        if ($fileVersion === $newVersion) {
+            // Already on the target version somehow — nothing to do.
+            $skipped++;
+            continue;
+        }
+
         $fileKek = $fileVersion === $oldVersion ? $oldKek : $keyManager->getOrCreateKek($kekRef, $fileVersion);
 
         $dek = $keyManager->unwrapDek($fileKek, (string) $file['encrypted_dek']);
@@ -77,28 +88,27 @@ foreach ($activeFiles as $file) {
 
         $files->updateEncryptedDek((string) $file['id'], $rewrappedDek, $newVersion);
         $rewrapped++;
-    } catch (\Throwable $e) {
-        fwrite(STDERR, "  Failed to re-wrap file {$file['id']}: {$e->getMessage()}" . PHP_EOL);
-        $failed++;
     }
+} catch (\Throwable $e) {
+    $pdo->rollBack();
+    sodium_memzero($oldKek);
+    sodium_memzero($newKek);
+    fwrite(STDERR, 'Rotation aborted and rolled back — no DEKs were changed: ' . $e->getMessage() . PHP_EOL);
+    fwrite(STDERR, 'App remains on kek_version v' . $oldVersion . '. Re-run bin/rotate-kek.php to retry.' . PHP_EOL);
+    OpsLock::release();
+    exit(1);
 }
+
+// Only bump the app's current version once every file has been successfully
+// re-wrapped — atomic with the re-wraps above, so the app row and the files
+// always move together.
+$apps->updateKekVersion($appId, $newVersion);
+$pdo->commit();
+OpsLock::release();
 
 sodium_memzero($oldKek);
 sodium_memzero($newKek);
 
-if ($failed > 0) {
-    fwrite(STDERR, "Aborting version bump — {$failed} file(s) failed to re-wrap. App's kek_version left at v{$oldVersion}." . PHP_EOL);
-    fwrite(STDERR, "Files that succeeded are already re-wrapped under v{$newVersion} and remain fully readable; re-run this script to retry the rest." . PHP_EOL);
-    exit(1);
-}
-
-// Only bump the app's current version once every existing file has been
-// successfully re-wrapped — otherwise new uploads would use a version
-// number whose key exists, but old files could be left inconsistently
-// split across versions with no way to tell from the app row alone.
-$apps->updateKekVersion($appId, $newVersion);
-
-fwrite(STDOUT, "Done. Re-wrapped: {$rewrapped}, already current: {$skipped}." . PHP_EOL);
-fwrite(STDOUT, "App now on kek_version {$newVersion}. The old key file for v{$oldVersion} was NOT deleted automatically." . PHP_EOL);
-fwrite(STDOUT, "Once you've confirmed everything works, deleting it is a deliberate, separate, manual step —" . PHP_EOL);
-fwrite(STDOUT, "matching the requirement that KEK deletion require explicit admin confirmation, not an automated one." . PHP_EOL);
+fwrite(STDOUT, "Done. Re-wrapped: {$rewrapped}, already current: {$skipped}. App now on kek_version {$newVersion}." . PHP_EOL);
+fwrite(STDOUT, 'The old key file for v' . $oldVersion . ' was NOT deleted automatically. Purge it after ' . PHP_EOL);
+fwrite(STDOUT, 'confirming nothing needs it via a scheduled `php bin/prune-keys.php` or the manual `bin/delete-kek.php`.' . PHP_EOL);
