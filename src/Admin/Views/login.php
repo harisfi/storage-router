@@ -14,14 +14,16 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
     <link rel="stylesheet" href="/admin/assets/pico.min.css">
     <link rel="stylesheet" href="/admin/assets/admin.css">
-    <style>
-        body > main { max-width: 420px; margin: 10vh auto; }
-    </style>
 </head>
 <body class="site-body">
-    <main class="container">
-        <article>
-            <h1>Admin Login</h1>
+    <main class="login-container">
+        <div class="login-brand">
+            <span class="login-logo" aria-hidden="true">🗄️</span>
+            <h1>Storage Router</h1>
+            <p class="login-tagline">Encrypted storage for your apps</p>
+        </div>
+        <article class="login-card">
+            <h2>Sign in</h2>
 
             <?php if (!empty($error)): ?>
                 <div class="alert alert-error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
