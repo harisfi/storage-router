@@ -1,4 +1,4 @@
-# Storage Router
+# 🗄️ Storage Router
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/harisfi/storage-router/actions/workflows/ci.yml/badge.svg)](https://github.com/harisfi/storage-router/actions/workflows/ci.yml)

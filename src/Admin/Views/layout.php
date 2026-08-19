@@ -22,13 +22,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?> — Storage Router Admin</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
     <link rel="stylesheet" href="/admin/assets/pico.min.css">
     <link rel="stylesheet" href="/admin/assets/admin.css">
 </head>
 <body class="site-body">
 <nav class="container-fluid">
     <ul>
-        <li><strong>Storage Router</strong></li>
+        <li><strong>🗄️ Storage Router</strong></li>
     </ul>
     <ul class="nav-links">
         <li><a href="/admin/">Dashboard</a></li>
