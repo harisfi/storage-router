@@ -8,7 +8,9 @@ use PDO;
 
 final class AuditLogRepository
 {
-    public function __construct(private PDO $pdo)
+    public const DEFAULT_RETENTION_DAYS = 30;
+
+    public function __construct(private PDO $pdo, private int $retentionDays = self::DEFAULT_RETENTION_DAYS)
     {
     }
 
@@ -37,6 +39,37 @@ final class AuditLogRepository
             ':target_id' => $targetId,
             ':metadata' => $metadata !== null ? json_encode($metadata, JSON_THROW_ON_ERROR) : null,
         ]);
+
+        // Enforce retention without depending on a scheduler: probabilistically
+        // prune expired rows (rare, one DELETE per ~1024 writes) so an
+        // unbounded audit log can't silently exhaust disk. A scheduled
+        // bin/prune-logs.php provides the deterministic, alertable path too.
+        if (random_int(1, 1024) === 1) {
+            $this->pruneOlderThan($this->retentionDays);
+        }
+    }
+
+    /**
+     * Deletes audit rows older than $days and returns how many were removed.
+     * Uses the leading date component of the stored ISO-8601 timestamps so
+     * it is format-robust (e.g. trailing 'Z'/timezone).
+     */
+    public function pruneOlderThan(int $days): int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM audit_log WHERE date(substr(created_at, 1, 10)) < date('now', :interval)"
+        );
+        $stmt->execute([':interval' => '-' . max(0, $days) . ' days']);
+        $count = (int) $stmt->fetchColumn();
+
+        if ($count > 0) {
+            $del = $this->pdo->prepare(
+                "DELETE FROM audit_log WHERE date(substr(created_at, 1, 10)) < date('now', :interval)"
+            );
+            $del->execute([':interval' => '-' . max(0, $days) . ' days']);
+        }
+
+        return $count;
     }
 
     /** Count of error rows — supports pagination for the errors view. */

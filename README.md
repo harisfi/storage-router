@@ -148,6 +148,7 @@ Copy `.env.example` to `.env` and set:
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
 | `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
 | `MAX_UPLOAD_BYTES` | `104857600` | Max plaintext upload size in bytes (default 100 MiB; `0` = unlimited, not recommended). Enforced by counting **actual bytes** read from the body, plus a fast-path `Content-Length` check and a temp-disk `disk_free_space` guard. |
+| `AUDIT_LOG_RETENTION_DAYS` | `30` | Audit-log rows older than this are pruned (probabilistically on writes and deterministically via `bin/prune-logs.php`). |
 | `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
 | `GOOGLE_USERINFO_URL` | real Google | Testing override only. |
 | `GOOGLE_AUTHORIZE_URL` | real Google | Testing override only. |
@@ -208,6 +209,7 @@ Sign in at `/admin/login`. From the dashboard you can:
 | `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
 | `php bin/delete-kek.php <app_id> <version>` | Purge an obsolete historical KEK version (refuses if any file of any status still references it). |
 | `php bin/prune-keys.php` | Scheduled: destroy every obsolete KEK version across all apps (same gate as delete-kek; exit≠0 on failure for alerting). |
+| `php bin/prune-logs.php [days]` | Retention: delete audit-log rows older than `days` (default 30). Runs deterministically for schedulers; the repository also self-prunes on writes. |
 | `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + only the KEKs the live DB needs (never interleaves with rotation/purge). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
 | `php bin/restore-backup.php <backup.enc> <dir>` | Decrypt a `--encrypt` backup and restore DB + KEKs. |
 | `php bin/verify-deployment.php <base_url>` | Post-deploy security check over HTTP (see below). |

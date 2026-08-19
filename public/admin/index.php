@@ -31,6 +31,7 @@ $routerArgs = [
     'googleClientId' => Config::get('GOOGLE_OAUTH_CLIENT_ID', ''),
     'googleClientSecret' => Config::get('GOOGLE_OAUTH_CLIENT_SECRET', ''),
     'googleRedirectUri' => Config::get('GOOGLE_OAUTH_REDIRECT_URI', ''),
+    'auditRetentionDays' => (int) Config::get('AUDIT_LOG_RETENTION_DAYS', '30'),
 ];
 $envToParam = [
     'GOOGLE_OAUTH_TOKEN_URL' => 'googleOauthTokenUrl',

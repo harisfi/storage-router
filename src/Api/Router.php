@@ -46,6 +46,7 @@ final class Router
         int $rateLimitUploadPerMinute = 30,
         int $rateLimitFilesPerMinute = 120,
         int $maxUploadBytes = 104857600,
+        int $auditRetentionDays = 30,
         string $googleOauthTokenUrl = 'https://oauth2.googleapis.com/token',
         string $googleUserInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo',
         string $googleDriveApiBaseUrl = 'https://www.googleapis.com/drive/v3',
@@ -55,7 +56,7 @@ final class Router
         $files = new FileRepository($pdo);
         $backends = new StorageBackendRepository($pdo);
         $access = new AppStorageAccessRepository($pdo);
-        $auditLog = new AuditLogRepository($pdo);
+        $auditLog = new AuditLogRepository($pdo, $auditRetentionDays);
         $rateLimits = new RateLimitRepository($pdo);
         $keyManager = new KeyManager($keyStorePath);
         $encryptor = new EnvelopeEncryptor();

@@ -50,6 +50,7 @@ final class Router
         string $googleClientId,
         string $googleClientSecret,
         string $googleRedirectUri,
+        int $auditRetentionDays = 30,
         string $googleOauthTokenUrl = 'https://oauth2.googleapis.com/token',
         string $googleUserInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo',
         string $googleAuthorizeUrl = 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -63,7 +64,7 @@ final class Router
         $files = new FileRepository($this->pdo);
         $backends = new StorageBackendRepository($this->pdo);
         $access = new AppStorageAccessRepository($this->pdo);
-        $auditLog = new AuditLogRepository($this->pdo);
+        $auditLog = new AuditLogRepository($this->pdo, $auditRetentionDays);
         $keyManager = new KeyManager($keyStorePath);
 
         $localProvider = new LocalProvider($files);

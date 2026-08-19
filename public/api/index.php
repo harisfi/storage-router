@@ -37,6 +37,7 @@ $routerArgs = [
     'rateLimitUploadPerMinute' => (int) Config::get('RATE_LIMIT_UPLOAD_PER_MINUTE', '30'),
     'rateLimitFilesPerMinute' => (int) Config::get('RATE_LIMIT_FILES_PER_MINUTE', '120'),
     'maxUploadBytes' => (int) Config::get('MAX_UPLOAD_BYTES', '104857600'),
+    'auditRetentionDays' => (int) Config::get('AUDIT_LOG_RETENTION_DAYS', '30'),
 ];
 $envToParam = [
     'GOOGLE_OAUTH_TOKEN_URL' => 'googleOauthTokenUrl',
