@@ -1,5 +1,9 @@
 # Storage Router
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/harisfi/storage-router/actions/workflows/ci.yml/badge.svg)](https://github.com/harisfi/storage-router/actions/workflows/ci.yml)
+[![PHP](https://img.shields.io/badge/PHP-%3E%3D8.1-777bb4.svg)](composer.json)
+
 A multi-app, multi-provider **encrypted** storage router. A single PHP service lets any number of client applications upload, download, and delete files without ever knowing (or caring) where those files physically live. Content is encrypted before it touches any backend, and an admin controls which apps can use which storage pool.
 
 **Every file is encrypted at rest** — on Google Drive or on local disk — using envelope encryption. Backends are pure blob stores; only the router holds the keys and the metadata.
@@ -75,6 +79,16 @@ Secrets and protection, summarized:
 2. **Capacity is enforced transactionally** — local-backend capacity is checked inside the same DB transaction that inserts the file row, avoiding a check-then-write race.
 
 > **Hosting note:** this project targets shared hosting where sensitive paths cannot sit structurally outside the webroot. They are protected with deny-all `.htaccess` rules. That is a real mitigation, not a structural guarantee — run `bin/verify-deployment.php` after every deploy (see [Deployment](#deployment)).
+
+## Operations: filesystem permissions & the secrets contract
+
+These rules matter — they're what stop a leaked file from becoming a full compromise:
+
+- **Never commit**: `.env`, `storage/db/*.sqlite`, `storage/keys/*.kek`, `storage/local-backends/*` (all already gitignored). `.env.example` is the only config that belongs in version control.
+- **`storage/keys/`** must be `0700` with each `.kek` file `0400` (created so by `KeyManager`, but confirm on a real deploy).
+- **`storage/`** (and `db/`, `local-backends/`) should be `0700`, not world-readable.
+- **Keep the KEK store and the SQLite DB in separate backups** — together they can decrypt everything; separately, neither is enough.
+- **Point the document root at `public/`** if your host allows it, so `storage/`, `src/`, and `vendor/` sit outside the webroot rather than relying only on `.htaccess` rules.
 
 ## Requirements
 
@@ -191,7 +205,9 @@ Sign in at `/admin/login`. From the dashboard you can:
 
 ## Deployment
 
-**Shared hosting (Scenario B)** — upload `router-app/` under your webroot (e.g. as `public_html/router-app/`) and add a root `.htaccess` that routes every request into the app's `public/` folder:
+**Simplest option** — point your document root directly at `public/`. Then the deny-all `.htaccess` rules inside `router-app/` are purely defensive and the sensitive paths sit outside the docroot entirely.
+
+**Shared hosting** — if the whole repo must live under your webroot (e.g. as `public_html/router-app/`), add a root `.htaccess` that routes every request into the app's `public/` folder:
 
 ```apache
 RewriteEngine On
