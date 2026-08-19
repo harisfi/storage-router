@@ -156,8 +156,8 @@ Copy `.env.example` to `.env` and set:
 | `GOOGLE_OAUTH_CLIENT_SECRET` | — | Google OAuth2 client secret. |
 | `GOOGLE_OAUTH_REDIRECT_URI` | — | Redirect URI registered in Google Cloud Console. |
 | `ADMIN_SESSION_SECRET` | — | Secret for admin sessions. |
-| `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
-| `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
+| `RATE_LIMIT_UPLOAD_PER_MINUTE` | `0` | *Opt-in* uploads per app per 60s window. **`0` (default) = disabled**; edge limiting (Nginx `limit_req`/CDN) is the primary control, and enabling this writes to SQLite. |
+| `RATE_LIMIT_FILES_PER_MINUTE` | `0` | *Opt-in* download/delete requests per app per 60s. `0` (default) = disabled for the same reason. |
 | `MAX_UPLOAD_BYTES` | `104857600` | Max plaintext upload size in bytes (default 100 MiB; `0` = unlimited, not recommended). Enforced by counting **actual bytes** read from the body, plus a fast-path `Content-Length` check and a temp-disk `disk_free_space` guard. |
 | `AUDIT_LOG_RETENTION_DAYS` | `30` | Audit-log rows older than this are pruned (probabilistically on writes and deterministically via `bin/prune-logs.php`). |
 | `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
