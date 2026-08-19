@@ -62,6 +62,19 @@ final class FileController
         // — so decryption sits uniformly in front of either provider
         // without either one needing to know encryption exists.
         $provider = $this->providers->forBackend($backend);
+
+        // Temp-disk capacity guard before spooling ciphertext, mirroring the
+        // upload guard: drives under concurrent large downloads can't exhaust
+        // the shared temp volume. This is an early warning, not a hard bound —
+        // the per-app download rate limit is the structural control.
+        if (function_exists('disk_free_space')) {
+            $tempFree = disk_free_space(sys_get_temp_dir());
+            if ($tempFree !== false && $tempFree < 67108864) { // < 64 MiB left
+                sodium_memzero($dek);
+                ErrorCatalog::respond(507, ErrorCatalog::NO_STORAGE_AVAILABLE, 'Server temporary storage is low; try again shortly.');
+            }
+        }
+
         $cipherBuffer = fopen('php://temp/maxmemory:5242880', 'r+b');
 
         try {
@@ -69,6 +82,10 @@ final class FileController
         } catch (Throwable $e) {
             sodium_memzero($dek);
             fclose($cipherBuffer);
+            $this->auditLog->log('app', (string) $app['id'], 'download.fetch_failed', 'error', $fileId, [
+                'reason' => 'provider_fetch_failed',
+                'errors' => [['storage_id' => (string) $backend['id'], 'error' => get_class($e)]],
+            ]);
             ErrorCatalog::respond(502, ErrorCatalog::INTERNAL_ERROR, 'Could not fetch file from storage backend.');
         }
         rewind($cipherBuffer);
@@ -89,11 +106,14 @@ final class FileController
         try {
             $this->encryptor->decryptStream($dek, $header, $cipherBuffer, $out);
         } catch (Throwable $e) {
-            // Abort the transfer mid-stream: the client already has fewer
-            // bytes than Content-Length advertised, so it detects truncation
-            // rather than treating the file as valid. Nothing beyond the
-            // authenticated per-chunk plaintext has leaked — that plaintext
-            // is the caller's own, already-authorized file.
+            // Record the failure — a decryption/auth/IO error mid-download
+            // must never be silent, even though HTTP headers are already sent
+            // and the only client-visible signal is connection truncation.
+            $this->auditLog->log('app', (string) $app['id'], 'download.failed', 'error', $fileId, [
+                'reason' => 'decrypt_failed',
+                'errors' => [['storage_id' => (string) $backend['id'], 'error' => get_class($e)]],
+            ]);
+            throw $e; // propagate so the global error handler logs it too
         } finally {
             sodium_memzero($dek);
             fclose($cipherBuffer);

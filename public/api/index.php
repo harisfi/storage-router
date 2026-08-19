@@ -36,7 +36,7 @@ $routerArgs = [
     'googleClientSecret' => Config::get('GOOGLE_OAUTH_CLIENT_SECRET', ''),
     'rateLimitUploadPerMinute' => (int) Config::get('RATE_LIMIT_UPLOAD_PER_MINUTE', '30'),
     'rateLimitFilesPerMinute' => (int) Config::get('RATE_LIMIT_FILES_PER_MINUTE', '120'),
-    'maxUploadBytes' => (int) Config::get('MAX_UPLOAD_BYTES', '0'),
+    'maxUploadBytes' => (int) Config::get('MAX_UPLOAD_BYTES', '104857600'),
 ];
 $envToParam = [
     'GOOGLE_OAUTH_TOKEN_URL' => 'googleOauthTokenUrl',

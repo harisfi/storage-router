@@ -45,7 +45,7 @@ final class Router
         string $googleClientSecret,
         int $rateLimitUploadPerMinute = 30,
         int $rateLimitFilesPerMinute = 120,
-        int $maxUploadBytes = 0,
+        int $maxUploadBytes = 104857600,
         string $googleOauthTokenUrl = 'https://oauth2.googleapis.com/token',
         string $googleUserInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo',
         string $googleDriveApiBaseUrl = 'https://www.googleapis.com/drive/v3',

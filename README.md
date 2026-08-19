@@ -147,7 +147,7 @@ Copy `.env.example` to `.env` and set:
 | `ADMIN_SESSION_SECRET` | — | Secret for admin sessions. |
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
 | `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
-| `MAX_UPLOAD_BYTES` | `0` | Max plaintext upload size in bytes (`0` = unlimited). Enforced from the `Content-Length` header *before* encryption and from the actual encrypted size after, so a missing header can't bypass it. |
+| `MAX_UPLOAD_BYTES` | `104857600` | Max plaintext upload size in bytes (default 100 MiB; `0` = unlimited, not recommended). Enforced by counting **actual bytes** read from the body, plus a fast-path `Content-Length` check and a temp-disk `disk_free_space` guard. |
 | `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
 | `GOOGLE_USERINFO_URL` | real Google | Testing override only. |
 | `GOOGLE_AUTHORIZE_URL` | real Google | Testing override only. |
@@ -180,7 +180,9 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
 
-**Download:** streams decrypted bytes to the caller with per-chunk AEAD authentication and the exact `Content-Length` sent up front — a mid-stream failure aborts the transfer, which the client detects as truncation (fewer bytes than advertised) rather than receiving a silent short-but-valid file. **Upload size:** the cap is enforced by **counting actual bytes read** from the request body, so a spoofed `Content-Length` can't bypass it. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable. Memory stays bounded (everything streams through `php://temp` with a 5 MiB in-RAM cap, spilling to a temp file for large files).
+**Download:** streams decrypted bytes to the caller with per-chunk AEAD authentication. The server sends the exact `Content-Length` (stored plaintext size) up front; if a chunk fails authentication mid-stream, the connection is aborted. **Consumers must enforce the `Content-Length`**: read exactly the advertised number of bytes, and on a short response **discard** the file and treat the download as failed — never save a truncated body. **Upload size:** the cap is enforced by counting actual bytes read, so a spoofed `Content-Length` can't bypass it. **Delete:** the stored DEK is destroyed before the backend blob is removed, so even if the blob delete fails, the leftover ciphertext is permanently undecryptable. Memory stays bounded (everything streams through `php://temp`, 5 MiB in RAM then a temp file), and both uploads and downloads refuse early when the temp disk free space drops below 64 MiB.
+
+Decryption/fetch failures during a download are **not silent** — they are written to the audit log (`download.failed` / `download.fetch_failed`) and rethrown so the server error log records them too.
 
 ## Admin UI
 
