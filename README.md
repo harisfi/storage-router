@@ -1,0 +1,264 @@
+# Storage Router
+
+A multi-app, multi-provider **encrypted** storage router. A single PHP service lets any number of client applications upload, download, and delete files without ever knowing (or caring) where those files physically live. Content is encrypted before it touches any backend, and an admin controls which apps can use which storage pool.
+
+**Every file is encrypted at rest** — on Google Drive or on local disk — using envelope encryption. Backends are pure blob stores; only the router holds the keys and the metadata.
+
+> Works with **PHP ≥ 8.1**, SQLite, and nothing else. No framework, no JS build step, no external PHP dependencies.
+
+## Features
+
+- **REST API** (`/api/*`) for client apps — upload, download, delete — scoped per app and per optional `user_id`.
+- **Envelope encryption** (`libsodium`): a random per-file DEK wrapped by a per-app KEK, streamed through `crypto_secretstream_xchacha20poly1305`.
+- **Two storage backends** behind one interface: **Google Drive** (via REST OAuth2) and **local disk**, freely mixed per app.
+- **Backend selection** — least-used-space first, priority as a manual tie-breaker, with retry-on-failure to the next candidate.
+- **Admin UI** (`/admin/*`) — manage backends, apps, app↔backend assignments, a file browser, and an operational-error view.
+- **Versioned KEK rotation** — re-wrap DEKs without touching file content, and without ever breaking in-flight decryption.
+- **Per-app rate limiting**, a **backup** tool, and a **post-deploy security verification** tool.
+- **Audit log** of admin actions, content-level access, and every operational failure.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Client App A] -->|API key| API
+    B[Client App B] -->|API key| API
+    C[Client App C] -->|API key| API
+    UI[Admin UI] -->|admin session| ADMIN
+
+    API[Public API /api] --> ROUTER
+    ADMIN[Admin /admin] --> ROUTER
+
+    ROUTER["Router
+    • API-key auth + rate limiting
+    • Backend selection
+    • Encrypt / decrypt (streaming)
+    • Metadata DB access"] --> SPI
+
+    SPI[StorageProviderInterface
+    upload / download / delete / getQuota] --> GOOGLE
+    SPI --> LOCAL
+
+    GOOGLE[GoogleDriveProvider
+    OAuth2, resumable] --> DB[(SQLite
+    apps, storage_backends,
+    app_storage_access, files,
+    admins, audit_log, rate_limits)]
+
+    LOCAL[LocalProvider
+    sharded local disk] --> DB
+```
+
+**Key idea:** the router is the single source of truth for file location and metadata. Drive accounts and local paths are interchangeable, encrypted blob stores.
+
+## Security model
+
+Encryption is at the core, so it's worth being precise:
+
+- Each file gets a random **Data Encryption Key (DEK)**.
+- The file is encrypted with the DEK using a streaming AEAD construction (`crypto_secretstream_xchacha20poly1305`), which generates a fresh nonce per file and authenticates every chunk — tampering aborts the download rather than serving bad data.
+- The DEK is wrapped under a per-app **Key Encryption Key (KEK)**, stored as a `0400` file under `storage/keys/` (outside version control and, ideally, outside the webroot).
+- A compromise of one app's KEK never exposes another app's files.
+
+Secrets and protection, summarized:
+
+| What | Where | Protection |
+|---|---|---|
+| Per-app KEKs | `storage/keys/{app_id}.kek` | `0400`, gitignored, `.htaccess` deny-all |
+| Wrapped DEKs | SQLite `files.encrypted_dek` | Only decryptable with the matching KEK |
+| Google OAuth refresh tokens | SQLite `storage_backends.provider_config` | Encrypted at rest under a dedicated system KEK |
+| Admin password / API keys | SQLite | `password_hash()` / SHA-256 hash (API keys shown once) |
+| Ciphertext (blobs) | Drive or local backend | Opaque — backend can't read it |
+
+**Two load-bearing rules from the threat model:**
+1. **KEK/DB separation** — the KEK store and the SQLite DB must live in separate trust boundaries (separate backups, snapshots, permissions). If an attacker gets both together, everything is decryptable.
+2. **Capacity is enforced transactionally** — local-backend capacity is checked inside the same DB transaction that inserts the file row, avoiding a check-then-write race.
+
+> **Hosting note:** this project targets shared hosting where sensitive paths cannot sit structurally outside the webroot. They are protected with deny-all `.htaccess` rules. That is a real mitigation, not a structural guarantee — run `bin/verify-deployment.php` after every deploy (see [Deployment](#deployment)).
+
+## Requirements
+
+- PHP **≥ 8.1** with extensions: `pdo`, `pdo_sqlite`, `sodium`, `curl`, `json`.
+- [Composer](https://getcomposer.org/) (used only for PSR-4 autoloading — no packages are required).
+- Apache with `AllowOverride All` enabled, or any web server that routes to `public/`.
+
+## Installation
+
+```bash
+composer install
+
+cp .env.example .env   # then edit .env (see Configuration)
+php bin/migrate.php    # creates the SQLite schema; idempotent — safe to re-run
+
+# create your first admin for the /admin UI
+php bin/create-admin.php yourusername
+```
+
+Serve the `public/` directory as your document root (the API front controller is `public/api/index.php`, the admin UI is `public/admin/index.php`). Point both at it, or use the shared-hosting rewrite in [Deployment](#deployment).
+
+## Quickstart
+
+After install, the full round trip is:
+
+```bash
+# 1. Create an app — prints an API key exactly once; only its hash is stored.
+php bin/create-app.php "My App"
+
+# 2. Create a local backend (cap in bytes; 0 = uncapped)
+php bin/create-local-backend.php "Local #1" 5368709120 <app_id>
+
+# 3. Assign the backend to the app
+php bin/assign-backend.php <app_id> <storage_id> 100
+
+# 4. Use the API
+curl -X POST -H "X-API-Key: <your_key>" --data-binary @somefile.txt https://yourdomain.com/api/upload
+curl -H "X-API-Key: <your_key>" https://yourdomain.com/api/files/<file_id> -o downloaded.txt
+curl -X DELETE -H "X-API-Key: <your_key>" https://yourdomain.com/api/files/<file_id>
+```
+
+Optional: add `-H "X-User-Id: some-user"` to scope a file to a specific app-defined user.
+
+## Configuration
+
+Copy `.env.example` to `.env` and set:
+
+| Key | Default | Description |
+|---|---|---|
+| `APP_ENV` | `production` | Environment label. |
+| `DB_PATH` | `storage/db/router.sqlite` | SQLite database path. |
+| `KEK_STORE_PATH` | `storage/keys` | Directory for per-app KEK files (`0400`, never committed). |
+| `GOOGLE_OAUTH_CLIENT_ID` | — | Google OAuth2 client ID (required for Drive backends). |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | — | Google OAuth2 client secret. |
+| `GOOGLE_OAUTH_REDIRECT_URI` | — | Redirect URI registered in Google Cloud Console. |
+| `ADMIN_SESSION_SECRET` | — | Secret for admin sessions. |
+| `RATE_LIMIT_UPLOAD_PER_MINUTE` | `30` | Uploads per app per 60s window; `0` disables. |
+| `RATE_LIMIT_FILES_PER_MINUTE` | `120` | File download/delete requests per app per 60s; `0` disables. |
+| `GOOGLE_OAUTH_TOKEN_URL` | real Google | Testing override only — point at a fake server. |
+| `GOOGLE_USERINFO_URL` | real Google | Testing override only. |
+| `GOOGLE_AUTHORIZE_URL` | real Google | Testing override only. |
+| `GOOGLE_DRIVE_API_BASE_URL` | real Google | Testing override only. |
+| `GOOGLE_DRIVE_UPLOAD_BASE_URL` | real Google | Testing override only. |
+
+`.env` must **never** be committed or reachable by URL.
+
+## API reference
+
+All endpoints are authenticated with an `X-API-Key` header (or `Authorization: Bearer <key>`) and scoped to the calling app.
+
+| Method | Path | Description | Success |
+|---|---|---|---|
+| `POST` | `/api/upload` | Stream a file body; encrypt, select a backend, store. | `201` → `{ "file_id": "..." }` |
+| `GET` | `/api/files/{file_id}` | Stream the decrypted file back, `Content-Disposition: attachment`. | `200` |
+| `DELETE` | `/api/files/{file_id}` | Delete from backend + metadata. | `204` |
+
+Optional request header: `X-User-Id` (opaque, app-defined) to scope files to a specific end-user.
+
+Error responses use a small fixed catalog with HTTP status codes:
+
+| Status | Code | Meaning |
+|---|---|---|
+| `401` | `unauthorized` | Missing/invalid API key, or app suspended. |
+| `404` | `not_found` | File not found **or not owned by this app** (IDOR protection). |
+| `405` | `invalid_request` | Method not allowed. |
+| `429` | `rate_limited` | Per-app rate limit exceeded (also sends `Retry-After: 60`). |
+| `507` | `no_storage_available` | No eligible backend could accept the file. |
+| `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
+
+## Admin UI
+
+Sign in at `/admin/login`. From the dashboard you can:
+
+- **Storage Backends** — add a local backend or connect a Google Drive account via OAuth, enable/disable, remove (only when it holds no files).
+- **Apps** — create apps (API key shown once), suspend/activate.
+- **Assignments** — choose which backends each app may use and their priority.
+- **Files** — browse and migrate files across backends; view metadata.
+- **Errors** — review `audit_log` failure rows.
+
+## CLI reference
+
+| Command | Purpose |
+|---|---|
+| `php bin/migrate.php` | Run pending SQL migrations (idempotent). |
+| `php bin/create-admin.php <username>` | Create an admin account (prompts for password, min 12 chars). |
+| `php bin/create-app.php "Name"` | Create an app; prints the API key once. |
+| `php bin/create-local-backend.php "Label" <cap_bytes> [app_id]` | Create a local disk backend. |
+| `php bin/list-storage-backends.php` | List all backends. |
+| `php bin/assign-backend.php <app_id> <storage_id> [priority]` | Grant an app access to a backend. |
+| `php bin/refresh-quota.php [storage_id]` | Refresh cached quota (omit to refresh all). |
+| `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
+| `php bin/backup.php [output_dir]` | Snapshot the DB + all KEKs (defaults to `storage/backups/`). |
+| `php bin/verify-deployment.php <base_url>` | Post-deploy security check (see below). |
+
+## Deployment
+
+**Shared hosting (Scenario B)** — upload `router-app/` under your webroot (e.g. as `public_html/router-app/`) and add a root `.htaccess` that routes every request into the app's `public/` folder:
+
+```apache
+RewriteEngine On
+RewriteCond %{REQUEST_URI} !^/router-app/public/
+RewriteRule ^(.*)$ /router-app/public/$1 [L]
+```
+
+Then:
+
+1. `composer install --no-dev --optimize-autoloader` on the host.
+2. Copy `.env.example` → `.env` and set real values (never commit `.env`).
+3. Confirm `AllowOverride All` is enabled so the deny-all `.htaccess` rules take effect.
+4. Run `php bin/migrate.php`.
+5. **Verify the security-critical paths return `403`** — see below.
+
+### Post-deploy verification
+
+Every sensitive path is protected by deny-all rules. The most important to confirm after any deploy:
+
+- `router-app/.env` (holds OAuth secret + session secret)
+- `router-app/storage/db/router.sqlite` (admin hashes, app API keys, wrapped DEKs)
+- `router-app/storage/keys/` (per-app encryption keys — a leak here + DB access defeats all encryption)
+- `router-app/storage/local-backends/` (ciphertext blobs)
+- `router-app/composer.json`, `router-app/src/...`, `router-app/vendor/autoload.php`
+
+Automate this check:
+
+```bash
+php bin/verify-deployment.php https://yourdomain.com
+```
+
+It makes real HTTP requests, asserts each sensitive path is blocked and the public pipeline works, and exits non-zero on any failure (usable as a CI/deploy check).
+
+## Project layout
+
+```
+router-app/
+├── .env.example          # config template (never commit .env)
+├── bin/                  # CLI tools (migrate, create-app, backup, ...)
+├── public/
+│   ├── api/index.php     # /api/* front controller
+│   └── admin/index.php   # /admin/* front controller
+├── src/
+│   ├── Api/              # public API router, controllers, middleware
+│   ├── Admin/            # admin router, controllers, views
+│   ├── Storage/          # provider interface + Google Drive & local providers, selector
+│   ├── Crypto/           # EnvelopeEncryptor, KeyManager (KEKs)
+│   ├── Data/             # PDO connection, repositories, SQL migrations
+│   └── Support/          # Config, Session, CSRF, ErrorCatalog, UuidGenerator
+├── storage/              # runtime state: db/, keys/, local-backends/, backups/
+├── tests/                # test suite
+├── composer.json
+└── LICENSE
+```
+
+## Backup
+
+`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** every current and historical KEK file. Back both up together — either half alone is useless without the other. Store them separately, since together they can decrypt everything.
+
+## Roadmap / known limits
+
+- **API surface** — currently upload / download / delete. Listing, overwrite (`PUT`), and metadata endpoints are not implemented.
+- **Tests** — the `tests/` suite is a stub; real coverage is a planned contribution (see [CONTRIBUTING](CONTRIBUTING.md)).
+- **Quota refresh** — manual only; no scheduled/cron refresh.
+- **KEK deletion** — deliberately manual, after rotation, requiring explicit admin confirmation.
+- **Providers** — Google Drive and local disk only. S3/others can be added behind `StorageProviderInterface`.
+
+## License
+
+[MIT](LICENSE) © Storage Router

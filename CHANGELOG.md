@@ -1,0 +1,25 @@
+# Changelog
+
+All notable changes to this project are documented here. This project follows [Semantic Versioning](https://semver.org/). Changes are grouped as **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**, and **Security**.
+
+## [Unreleased]
+
+- Initial public open-source release (MIT).
+
+### Added
+
+- Multi-app, multi-provider encrypted storage router.
+- REST API: `POST /api/upload`, `GET /api/files/{file_id}`, `DELETE /api/files/{file_id}`.
+- Envelope encryption via `libsodium` streaming AEAD (`crypto_secretstream_xchacha20poly1305`).
+- Per-app KEKs with versioned rotation (`bin/rotate-kek.php`).
+- Storage backends: Google Drive (REST OAuth2) and local disk, behind a common provider interface.
+- Least-used-space backend selection with priority tie-break and retry-on-failure.
+- Admin UI: storage backends, apps, app↔backend assignments, file browser, error view.
+- Per-app rate limiting (fixed 60-second window) on upload and file endpoints.
+- CLI tools: `migrate`, `create-admin`, `create-app`, `create-local-backend`,
+  `list-storage-backends`, `assign-backend`, `refresh-quota`, `rotate-kek`,
+  `backup`, `verify-deployment`.
+- Audit log for admin actions, content-level access, and operational failures.
+- Deny-all `.htaccess` protection for sensitive paths (shared-hosting layout).
+- `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`.
+- `bin/verify-deployment.php` automated post-deploy security check.
