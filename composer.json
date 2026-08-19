@@ -3,6 +3,7 @@
     "description": "Multi-app, multi-provider (Google Drive + local) encrypted storage router.",
     "type": "project",
     "license": "MIT",
+    "keywords": ["encryption", "storage", "google-drive", "sqlite", "libsodium", "rest-api"],
     "require": {
         "php": ">=8.1",
         "ext-pdo": "*",

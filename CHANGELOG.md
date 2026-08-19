@@ -4,7 +4,11 @@ All notable changes to this project are documented here. This project follows [S
 
 ## [Unreleased]
 
-- Initial public open-source release (MIT).
+Pending work for the next version. Nothing committed yet after 1.0.0.
+
+## [1.0.0] - 2026-08-20
+
+Initial public open-source release (MIT).
 
 ### Changed
 
