@@ -14,6 +14,14 @@ use Throwable;
 
 final class StorageBackendController
 {
+    /** Binary multipliers — matching the existing byte-sizes elsewhere (1 GB = 1024³ bytes). */
+    private const CAPACITY_UNITS = [
+        'B' => 1.0,
+        'KB' => 1024.0,
+        'MB' => 1024.0 ** 2,
+        'GB' => 1024.0 ** 3,
+        'TB' => 1024.0 ** 4,
+    ];
     public function __construct(
         private StorageBackendRepository $backends,
         private FileRepository $files,
@@ -57,10 +65,13 @@ final class StorageBackendController
         }
 
         $label = trim((string) ($post['label'] ?? ''));
-        $capacityCapBytes = (int) ($post['capacity_cap_bytes'] ?? 0);
+        $capacityCapBytes = self::capacityToBytes(
+            (float) ($post['capacity'] ?? 0),
+            (string) ($post['capacity_unit'] ?? 'GB')
+        );
 
         if ($label === '' || $capacityCapBytes <= 0) {
-            $this->redirectWithError('/admin/backends/add-local', 'Label and a positive capacity cap (in bytes) are required.');
+            $this->redirectWithError('/admin/backends/add-local', 'Label and a positive capacity cap are required.');
         }
 
         $storageId = UuidGenerator::generate();
@@ -166,6 +177,19 @@ final class StorageBackendController
         $this->auditLog->log('admin', $this->currentAdminId(), 'storage.delete', 'success', $storageId);
 
         $this->redirectWithFlash('/admin/backends', 'Backend removed.');
+    }
+
+    /** Converts a human-friendly "capacity + unit" pair to a whole number of bytes. */
+    private static function capacityToBytes(float $capacity, string $unit): int
+    {
+        $unit = strtoupper(trim($unit));
+        $multiplier = self::CAPACITY_UNITS[$unit] ?? 0.0;
+
+        if ($capacity <= 0 || $multiplier <= 0.0) {
+            return 0;
+        }
+
+        return (int) round($capacity * $multiplier);
     }
 
     private function currentAdminId(): string

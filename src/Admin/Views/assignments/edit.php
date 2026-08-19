@@ -13,6 +13,7 @@ $appId = htmlspecialchars((string) $app['id'], ENT_QUOTES, 'UTF-8');
 <?php else: ?>
     <form method="post" action="/admin/apps/<?= $appId ?>/assignments">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+        <figure class="overflow-auto">
         <table>
             <thead>
                 <tr>
@@ -38,11 +39,12 @@ $appId = htmlspecialchars((string) $app['id'], ENT_QUOTES, 'UTF-8');
                     </td>
                     <td><?= $label ?> <?= $backendDisabled ? '<span class="badge badge-disabled">globally disabled</span>' : '' ?></td>
                     <td><?= $type ?></td>
-                    <td><input type="number" name="backends[<?= $sid ?>][priority]" value="<?= $priority ?>" style="width:5rem;"></td>
+                    <td><input type="number" name="backends[<?= $sid ?>][priority]" value="<?= $priority ?>" aria-label="Priority for <?= $sid ?>"></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
+        </figure>
         <button type="submit">Save assignments</button>
     </form>
 <?php endif; ?>

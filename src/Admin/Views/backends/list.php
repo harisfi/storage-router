@@ -2,14 +2,14 @@
 /** @var array<int, array<string, mixed>> $backends */
 ?>
 <p>
-    <a href="/admin/backends/add-local">+ Add local backend</a>
-    &nbsp;|&nbsp;
-    <a href="/admin/storage-backends/google/connect">+ Connect Google Drive</a>
+    <a href="/admin/backends/add-local" role="button">+ Add local backend</a>
+    <a href="/admin/storage-backends/google/connect" role="button" class="secondary">+ Connect Google Drive</a>
 </p>
 
 <?php if ($backends === []): ?>
     <p>No storage backends yet.</p>
 <?php else: ?>
+    <figure class="overflow-auto">
     <table>
         <thead>
             <tr>
@@ -33,25 +33,33 @@
             ?>
             <tr>
                 <td><?= $label ?><br><small><code><?= $id ?></code></small></td>
-                <td><?= $type ?></td>
-                <td><span class="badge badge-<?= $status ?>"><?= $status ?></span></td>
-                <td><?= number_format($used) ?> / <?= $total > 0 ? number_format($total) : 'uncapped/unknown' ?></td>
+                <td><?= ucwords(str_replace('_', ' ', $type)) ?></td>
+                <td><span class="badge badge-<?= $status ?>"><?= ucfirst($status) ?></span></td>
                 <td>
-                    <form class="inline" method="post" action="/admin/backends/<?= $id ?>/toggle">
+                    <?php if ($total > 0): ?>
+                        <span class="quota-text"><?= \App\Support\Format::humanBytes((int) $used) ?> / <?= \App\Support\Format::humanBytes((int) $total) ?> (<?= \App\Support\Format::percent((int) $used, (int) $total) ?>%)</span>
+                        <progress value="<?= $used ?>" max="<?= $total ?>"></progress>
+                    <?php else: ?>
+                        <?= \App\Support\Format::humanBytes((int) $used) ?> / unknown
+                    <?php endif; ?>
+                </td>
+<td>
+                    <form class="inline-form" method="post" action="/admin/backends/<?= $id ?>/toggle">
                         <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <button type="submit"><?= $status === 'enabled' ? 'Disable' : 'Enable' ?></button>
+                        <button type="submit" class="secondary" data-tooltip="<?= $status === 'enabled' ? 'Disable' : 'Enable' ?>" aria-label="<?= $status === 'enabled' ? 'Disable' : 'Enable' ?>"><?= $status === 'enabled' ? '⏸' : '▶' ?></button>
                     </form>
-                    <form class="inline" method="post" action="/admin/backends/<?= $id ?>/refresh-quota">
+                    <form class="inline-form" method="post" action="/admin/backends/<?= $id ?>/refresh-quota">
                         <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <button type="submit">Refresh quota</button>
+                        <button type="submit" class="secondary" data-tooltip="Refresh quota" aria-label="Refresh quota">🔄</button>
                     </form>
-                    <form class="inline" method="post" action="/admin/backends/<?= $id ?>/remove" onsubmit="return confirm('Remove this backend? Only possible if it has never held any file.');">
+                    <form class="inline-form" method="post" action="/admin/backends/<?= $id ?>/remove" onsubmit="return confirm('Remove this backend? Only possible if it has never held any file.');">
                         <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <button type="submit">Remove</button>
+                        <button type="submit" class="secondary" data-tooltip="Remove" aria-label="Remove backend">🗑️</button>
                     </form>
                 </td>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    </figure>
 <?php endif; ?>

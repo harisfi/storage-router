@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Admin\Controllers;
 
+use App\Data\Repositories\AdminRepository;
 use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\AuditLogRepository;
 use App\Data\Repositories\FileRepository;
@@ -17,6 +18,7 @@ final class FileBrowserController
     public function __construct(
         private FileRepository $files,
         private AppRepository $apps,
+        private AdminRepository $admins,
         private StorageBackendRepository $backends,
         private StorageProviderRegistry $providers,
         private AuditLogRepository $auditLog
@@ -60,8 +62,28 @@ final class FileBrowserController
     {
         $errors = $this->auditLog->listErrors();
 
+        // Resolve actor ids to readable names: app UUIDs → app names,
+        // admin ids → usernames (per the audit log's actor_type). Unknown
+        // entries (e.g. a failed-login actor recorded as the submitted
+        // username) fall back to showing the raw id.
+        $actorNames = [];
+        foreach ($errors as $err) {
+            $id = (string) $err['actor_id'];
+            if (isset($actorNames[$id])) {
+                continue;
+            }
+
+            if ($err['actor_type'] === 'app') {
+                $app = $this->apps->findById($id);
+                $actorNames[$id] = $app['name'] ?? $id;
+            } elseif ($err['actor_type'] === 'admin') {
+                $admin = $this->admins->findById($id);
+                $actorNames[$id] = $admin['username'] ?? $id;
+            }
+        }
+
         $pageTitle = 'Operational Errors';
-        $content = function () use ($errors): void {
+        $content = function () use ($errors, $actorNames): void {
             require __DIR__ . '/../Views/files/errors.php';
         };
         require __DIR__ . '/../Views/layout.php';

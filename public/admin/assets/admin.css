@@ -1,0 +1,151 @@
+/* Custom admin styles layered on top of Pico CSS v2.
+ * Pico styles the base elements; only the project-specific pieces live here. */
+
+/* Let several inline buttons/forms sit on one line instead of stretching. */
+.inline-form {
+    display: inline-block;
+    margin: 0;
+}
+.inline-form button,
+.inline-form input[type='submit'] {
+    width: auto;
+}
+
+/* Status badges (Pico v2 has no badge component). */
+.badge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.badge-active,
+.badge-enabled {
+    background: var(--pico-ins-background, rgba(46, 160, 67, 0.14));
+    color: var(--pico-ins-color, #1a7f37);
+}
+.badge-disabled,
+.badge-suspended,
+.badge-error {
+    background: var(--pico-del-background, rgba(248, 81, 73, 0.14));
+    color: var(--pico-del-color, #cf222e);
+}
+
+/* Flash / error feedback boxes. */
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+}
+.alert-success {
+    background: var(--pico-ins-background, rgba(46, 160, 67, 0.1));
+    border-left-color: var(--pico-ins-color, #1a7f37);
+    color: inherit;
+}
+.alert-error {
+    background: var(--pico-del-background, rgba(248, 81, 73, 0.1));
+    border-left-color: var(--pico-del-color, #cf222e);
+    color: inherit;
+}
+
+/* Keep single-line code listings compact. */
+code {
+    white-space: nowrap;
+}
+
+/* Stacked label/value rows inside a table cell (file browser). */
+.cell-item {
+    white-space: nowrap;
+}
+.cell-label {
+    display: inline-block;
+    min-width: 5em;
+    font-size: 0.5rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.65;
+}
+
+/* Quota display in the storage backends table. */
+td progress {
+    display: block;
+    max-width: 190px;
+    height: 0.375rem;
+    margin: 0.25rem 0 0;
+}
+
+/* ---- Responsive nav -----------------------------------------------------
+ * Full link row on desktop; a Pico dropdown under the "Menu" button on
+ * small screens so the navbar doesn't wrap/truncate on mobile.
+ */
+.nav-links,
+nav details.dropdown.nav-menu {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .nav-links {
+        display: flex;
+    }
+    nav details.dropdown.nav-menu {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .nav-links {
+        display: none;
+    }
+    nav details.dropdown.nav-menu {
+        display: inline;
+    }
+}
+
+/* ---- Compact density ----------------------------------------------------
+ * Shrinks Pico's generous default sizing for a tighter, more minimal UI.
+ * Token overrides win over Pico's own media queries via !important; the
+ * element rules are scoped to body to beat Pico's component specificity.
+ * Remove or tune this block to restore the normal Pico scale.
+ */
+:root {
+    /* --pico-font-size: 87.5% !important;   ~14px base */
+    --pico-line-height: 1.45 !important;
+    --pico-spacing: 0.6rem !important;
+    --pico-block-spacing-vertical: 0.6rem !important;
+    --pico-typography-spacing-vertical: 0.65rem !important;
+    --pico-form-element-spacing-vertical: 0.3rem !important;
+    --pico-form-element-spacing-horizontal: 0.6rem !important;
+    --pico-grid-column-gap: 1rem !important;
+    --pico-grid-row-gap: 0.5rem !important;
+}
+body main.container { max-width: 1060px; }
+
+body button,
+body [role='button'],
+body input[type='submit'] {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.85rem;
+}
+
+body input:not([type='checkbox']):not([type='radio']),
+body select,
+body textarea {
+    padding: 0.3rem 0.5rem;
+}
+
+body table th,
+body table td {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+}
+
+body article {
+    padding: 1rem;
+}
+
+body h1 { font-size: 1.4rem; }
+body h2 { font-size: 1.2rem; }
+body h3 { font-size: 1.05rem; }

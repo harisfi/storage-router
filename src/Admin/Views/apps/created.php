@@ -8,7 +8,7 @@ $appIdEsc = htmlspecialchars($appId, ENT_QUOTES, 'UTF-8');
 $rawKeyEsc = htmlspecialchars($rawKey, ENT_QUOTES, 'UTF-8');
 $nameEsc = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
 ?>
-<div class="error" style="background:#fff8e1;border-color:#e0c68a;">
+<div class="alert alert-error">
     <strong>Save this API key now — it will not be shown again.</strong>
     Only its SHA-256 hash is stored.
 </div>

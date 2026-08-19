@@ -4,18 +4,18 @@
  * @var array<string, array{count: int, bytes: int}> $usageByApp
  */
 ?>
-<p><a href="/admin/apps/new">+ Create app</a></p>
+<p><a href="/admin/apps/new" role="button">+ Create app</a></p>
 
 <?php if ($apps === []): ?>
     <p>No apps yet.</p>
 <?php else: ?>
+    <figure class="overflow-auto">
     <table>
         <thead>
             <tr>
                 <th>Name</th>
                 <th>Status</th>
                 <th>Files</th>
-                <th>Total bytes</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
@@ -32,23 +32,23 @@
             ?>
             <tr>
                 <td><?= $name ?><br><small><code><?= $id ?></code></small></td>
-                <td><span class="badge badge-<?= $status ?>"><?= $status ?></span></td>
-                <td><?= number_format($usage['count']) ?></td>
-                <td><?= number_format($usage['bytes']) ?></td>
+                <td><span class="badge badge-<?= $status ?>"><?= \App\Support\Format::statusLabel($status) ?></span></td>
+                <td><?= number_format($usage['count']) ?> (<?= \App\Support\Format::humanBytes((int) $usage['bytes']) ?>)</td>
                 <td><?= $created ?></td>
                 <td>
-                    <a href="/admin/apps/<?= $id ?>/assignments">Assignments</a>
-                    <form class="inline" method="post" action="/admin/apps/<?= $id ?>/suspend">
+                    <a href="/admin/apps/<?= $id ?>/assignments" role="button" class="secondary" data-tooltip="Manage assignments" aria-label="Manage assignments">⚙️</a>
+                    <form class="inline-form" method="post" action="/admin/apps/<?= $id ?>/suspend">
                         <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <button type="submit"><?= $status === 'active' ? 'Suspend' : 'Reactivate' ?></button>
+                        <button type="submit" class="secondary" data-tooltip="<?= $status === 'active' ? 'Suspend app' : 'Reactivate app' ?>" aria-label="<?= $status === 'active' ? 'Suspend app' : 'Reactivate app' ?>"><?= $status === 'active' ? '⏸' : '▶' ?></button>
                     </form>
-                    <form class="inline" method="post" action="/admin/apps/<?= $id ?>/rotate-key" onsubmit="return confirm('Rotate this app\'s API key? The old key stops working immediately.');">
+                    <form class="inline-form" method="post" action="/admin/apps/<?= $id ?>/rotate-key" onsubmit="return confirm('Rotate this app\'s API key? The old key stops working immediately.');">
                         <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <button type="submit">Rotate key</button>
+                        <button type="submit" class="secondary" data-tooltip="Rotate API key" aria-label="Rotate API key">🔑</button>
                     </form>
                 </td>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    </figure>
 <?php endif; ?>

@@ -89,7 +89,7 @@ final class Router
         $this->storageBackends = new StorageBackendController($backends, $files, $providers, $auditLog, $projectRoot);
         $this->appsController = new AppController($apps, $files, $auditLog);
         $this->assignments = new AssignmentController($apps, $access, $auditLog);
-        $this->fileBrowser = new FileBrowserController($files, $apps, $backends, $providers, $auditLog);
+        $this->fileBrowser = new FileBrowserController($files, $apps, $admins, $backends, $providers, $auditLog);
     }
 
     public function dispatch(string $method, string $uri): void

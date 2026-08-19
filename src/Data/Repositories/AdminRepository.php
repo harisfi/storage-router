@@ -21,6 +21,15 @@ final class AdminRepository
         return $row === false ? null : $row;
     }
 
+    public function findById(string $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM admins WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row === false ? null : $row;
+    }
+
     public function create(string $username, string $passwordHash): void
     {
         $stmt = $this->pdo->prepare('INSERT INTO admins (username, password_hash) VALUES (:username, :hash)');
