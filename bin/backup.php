@@ -6,6 +6,8 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 
 use App\Data\Database;
+use App\Data\Repositories\AppRepository;
+use App\Data\Repositories\FileRepository;
 use App\Support\BackupCipher;
 use App\Support\Config;
 
@@ -65,20 +67,40 @@ try {
     exit(1);
 }
 
-// --- KEK store: every .kek file, current and historical (rotation
-// deliberately keeps old versions around — see bin/rotate-kek.php).
-// Losing these without a DB backup, or vice versa, makes the other
-// half useless — they must be backed up together, and this script
-// intentionally does both in one run for exactly that reason.
+// --- KEK store: back up only the keys the LIVE database actually needs
+// (each app's current KEK version plus any version still referenced by an
+// ACTIVE file). Obsolete historical keys with zero active references are
+// deliberately excluded, so a backup never widens the blast radius by
+// carrying keys for data that is no longer reachable; purge those
+// explicitly with bin/delete-kek.php after rotating.
+$apps = new AppRepository($pdo);
+$files = new FileRepository($pdo);
+
+$keyFiles = [];
+foreach ($apps->listAll() as $app) {
+    $ref = (string) $app['kek_ref'];
+    $versions = array_unique(array_merge(
+        [(int) $app['kek_version']],
+        $files->distinctActiveKekVersionsForApp((string) $app['id'])
+    ));
+
+    foreach ($versions as $version) {
+        $keyFiles[] = rtrim($keyStorePath, '/') . '/' . $ref . ($version > 1 ? ".v{$version}" : '') . '.kek';
+    }
+}
+$keyFiles = array_values(array_unique($keyFiles));
+
 $keyBackupDir = $outputDir . '/keys';
 if (!is_dir($keyBackupDir) && !mkdir($keyBackupDir, 0700, true) && !is_dir($keyBackupDir)) {
     fwrite(STDERR, "Could not create key backup directory: {$keyBackupDir}" . PHP_EOL);
     exit(1);
 }
 
-$keyFiles = glob(rtrim($keyStorePath, '/') . '/*.kek') ?: [];
 $copied = 0;
 foreach ($keyFiles as $keyFile) {
+    if (!is_file($keyFile)) {
+        continue;
+    }
     $dest = $keyBackupDir . '/' . basename($keyFile);
     if (copy($keyFile, $dest)) {
         chmod($dest, 0400);
@@ -88,7 +110,7 @@ foreach ($keyFiles as $keyFile) {
     }
 }
 
-fwrite(STDOUT, "Copied {$copied} KEK file(s) to: {$keyBackupDir}" . PHP_EOL);
+fwrite(STDOUT, "Copied {$copied} actively-used KEK file(s) to: {$keyBackupDir}" . PHP_EOL);
 
 if ($encrypt) {
     // Collapse DB + KEKs into a single passphrase-encrypted artifact and

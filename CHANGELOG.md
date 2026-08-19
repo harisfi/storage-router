@@ -18,7 +18,8 @@ All notable changes to this project are documented here. This project follows [S
 - Per-app rate limiting (fixed 60-second window) on upload and file endpoints, plus an IP-based throttle on the admin login form.
 - CLI tools: `migrate`, `create-admin`, `create-app`, `create-local-backend`,
   `list-storage-backends`, `assign-backend`, `refresh-quota`, `rotate-kek`,
-  `backup`, `restore-backup`, `verify-deployment`.
+  `delete-kek`, `backup`, `restore-backup`, `verify-deployment`.
+- Strict KEK retention: backups include only actively-referenced KEKs, and `bin/delete-kek.php` purges obsolete historical versions (gated on "not current" and "no active file references").
 - Audit log for admin actions, content-level access, and operational failures.
 - Deny-all `.htaccess` protection + documented Nginx equivalents for sensitive paths (shared-hosting layout).
 - `bin/backup.php` consistent DB + KEK snapshot via `VACUUM INTO`, with optional `--encrypt` (passphrase-encrypted single artifact) and `bin/restore-backup.php`.

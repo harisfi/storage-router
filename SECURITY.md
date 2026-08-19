@@ -18,7 +18,7 @@ You should receive an acknowledgement within 3 business days. We'll keep you upd
 
 Things we care about most, in priority order:
 
-1. **Encryption and key management** — KEK/DEK handling, nonce misuse, key-rotation correctness, and the KEK/DB separation rule.
+1. **Encryption and key management** — KEK/DEK handling, nonce misuse, key-rotation correctness, the KEK/DB separation rule, and the KEK retention/purge policy (`bin/delete-kek.php`, backup key selection).
 2. **App isolation / access control** — any way an app (or `user_id`) can read, write, or delete another's files.
 3. **Secret handling** — `.env`, KEK files, OAuth refresh tokens, API keys at rest or in logs, and whether the backup/restore path (`bin/backup.php --encrypt`, `BackupCipher`) leaks plaintext.
 4. **Auth hardening** — the per-IP admin-login throttle and per-app API rate limiting.

@@ -139,4 +139,20 @@ public function testBackendByteAccounting(): void
         $ids2 = array_column($page2, 'id');
         $this->assertNotContains($ids1[0], $ids2);
     }
+
+    public function testActiveKekVersionGating(): void
+    {
+        $this->createFile(['app_id' => 'app-1', 'kek_version' => 1]);
+        $this->createFile(['app_id' => 'app-1', 'kek_version' => 2]);
+        $this->createFile(['app_id' => 'app-1', 'kek_version' => 2]);
+        $repo = new FileRepository($this->pdo);
+
+        $this->assertSame(1, $repo->countActiveForAppVersion('app-1', 1));
+        $this->assertSame(2, $repo->countActiveForAppVersion('app-1', 2));
+        $this->assertSame(0, $repo->countActiveForAppVersion('app-1', 5));
+        $this->assertSame([1, 2], $repo->distinctActiveKekVersionsForApp('app-1'));
+
+        // app-2 references nothing.
+        $this->assertSame([], $repo->distinctActiveKekVersionsForApp('app-2'));
+    }
 }

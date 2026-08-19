@@ -181,6 +181,28 @@ final class FileRepository
         return (int) $this->pdo->query("SELECT COUNT(*) FROM files WHERE status = 'active'")->fetchColumn();
     }
 
+    /** Number of ACTIVE files wrapped under a specific KEK version — gates deletion of that key. */
+    public function countActiveForAppVersion(string $appId, int $kekVersion): int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM files WHERE app_id = :app_id AND status = 'active' AND kek_version = :v"
+        );
+        $stmt->execute([':app_id' => $appId, ':v' => $kekVersion]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return list<int> KEK versions still referenced by this app's active files. */
+    public function distinctActiveKekVersionsForApp(string $appId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT DISTINCT kek_version FROM files WHERE app_id = :app_id AND status = 'active' ORDER BY kek_version"
+        );
+        $stmt->execute([':app_id' => $appId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
     /** Sum of all active file sizes, across every app — used by the dashboard. */
     public function sumAllActiveBytes(): int
     {

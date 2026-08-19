@@ -200,6 +200,7 @@ Sign in at `/admin/login`. From the dashboard you can:
 | `php bin/assign-backend.php <app_id> <storage_id> [priority]` | Grant an app access to a backend. |
 | `php bin/refresh-quota.php [storage_id]` | Refresh cached quota (omit to refresh all). |
 | `php bin/rotate-kek.php <app_id>` | Rotate an app's KEK: re-wrap all active DEKs to a new version. |
+| `php bin/delete-kek.php <app_id> <version>` | Purge an obsolete historical KEK version (refuses if any active file still references it). |
 | `php bin/backup.php [output_dir] [--encrypt]` | Snapshot DB + all KEKs (default `storage/backups/`). `--encrypt` writes a single passphrase-encrypted `.backup.enc`. |
 | `php bin/restore-backup.php <backup.enc> <dir>` | Decrypt a `--encrypt` backup and restore DB + KEKs. |
 | `php bin/verify-deployment.php <base_url>` | Post-deploy security check over HTTP (see below). |
@@ -291,9 +292,9 @@ storage-router/
 
 ## Backup
 
-`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** every current and historical KEK file. Back both up together — either half alone is useless without the other, since together they can decrypt everything.
+`bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** only the KEKs the live database actually needs — each app's current KEK version and any version still referenced by an active file. Obsolete historical keys with zero active references are deliberately excluded, so an old backup can't widen the blast radius by carrying keys for data that is no longer reachable.
 
-Use `--encrypt` to collapse DB + KEKs into a single passphrase-encrypted artifact whose plaintext intermediates are deleted:
+Use `--encrypt` to collapse DB + the needed KEKs into a single passphrase-encrypted artifact whose plaintext intermediates are deleted:
 
 ```bash
 # encrypt (passphrase from BACKUP_PASSWORD env or an interactive prompt)
@@ -304,6 +305,20 @@ php bin/restore-backup.php <backup.enc> <restore_dir>
 ```
 
 **Treat an unencrypted archive as a secret.** An archive bucket or `storage/` copy that holds the DB *and* the KEKs is the complete master secret — keep it off the server, keep the passphrase separate from the artifacts, and never archive the whole `storage/` directory wholesale into the same location.
+
+## KEK retention
+
+Rotating an app's KEK (`bin/rotate-kek.php`) re-wraps every active DEK under a new version; the old key becomes obsolete for data that matters. Historical versions are removed with a **strict, gated purge**:
+
+```bash
+php bin/delete-kek.php <app_id> <version>
+```
+
+`delete-kek.php` refuses to run unless:
+- the version is **below** the app's current KEK version (you can never delete the key in use), and
+- **no active file** is still wrapped under it.
+
+This is the documented destruction policy: a historical KEK is destroyed once all active files have been re-wrapped to a newer version. Purge obsolete keys *after* the rotation that orphaned them so new backups carry only the keys that can still decrypt active data.
 
 ## Testing
 
@@ -320,7 +335,7 @@ Coverage is focused on the highest-stakes code: `Crypto/` (encryption), `Storage
 
 - **API surface** — currently upload / download / delete. Listing, overwrite (`PUT`), and metadata endpoints are not implemented.
 - **Quota refresh** — manual only; no scheduled/cron refresh.
-- **KEK deletion** — deliberately manual, after rotation, requiring explicit admin confirmation.
+- **KEK deletion** — manual and gated via `bin/delete-kek.php` (only obsolete versions below the current one with zero active references), never automated or session-triggered.
 - **Providers** — Google Drive and local disk only. S3/others can be added behind `StorageProviderInterface`.
 
 ## License
