@@ -6,6 +6,10 @@ All notable changes to this project are documented here. This project follows [S
 
 - Initial public open-source release (MIT).
 
+### Changed
+
+- In-app per-app rate limiter is now **opt-in and off by default** (`RATE_LIMIT_*` = 0): it performs no SQLite writes unless enabled, and edge (Nginx `limit_req`/CDN) is documented as the primary traffic control.
+
 ### Added
 
 - Multi-app, multi-provider encrypted storage router.

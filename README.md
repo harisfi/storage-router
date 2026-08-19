@@ -18,7 +18,7 @@ A multi-app, multi-provider **encrypted** storage router. A single PHP service l
 - **Backend selection** — least-used-space first, priority as a manual tie-breaker, with retry-on-failure to the next candidate.
 - **Admin UI** (`/admin/*`) — manage backends, apps, app↔backend assignments, a file browser, and an operational-error view.
 - **Versioned KEK rotation** — re-wrap DEKs without touching file content, and without ever breaking in-flight decryption.
-- **Per-app rate limiting**, a **per-IP login throttle** on the admin form, a **backup** tool (with passphrase encryption), and a **post-deploy security verification** tool.
+- **Edge-first traffic control** — Nginx `limit_req`/CDN for actual DoS; an **opt-in per-app rate limiter** (off by default so it doesn't load the single-writer DB) and a **per-IP throttle** on the admin login, plus a **backup** tool (with passphrase encryption) and a **post-deploy security verification** tool.
 - **Audit log** of admin actions, content-level access, and every operational failure.
 
 ## Architecture
@@ -60,7 +60,7 @@ flowchart TD
 Encryption is at the core, so it's worth being precise:
 
 - Each file gets a random **Data Encryption Key (DEK)**.
-- The file is encrypted with the DEK using a streaming AEAD construction (`crypto_secretstream_xchacha20poly1305`), which generates a fresh nonce per file and authenticates every chunk — tampering aborts the download rather than serving bad data.
+- The file is encrypted with the DEK using a streaming AEAD construction (`crypto_secretstream_xchacha20poly1305`), which generates a fresh nonce per file and authenticates every chunk — tampering aborts the stream rather than serving **unauthenticated** data. (Each chunk is authenticated before it's written out; on a mid-stream failure the connection aborts and the client detects truncation via the advertised `Content-Length`.)
 - The DEK is wrapped under a per-app **Key Encryption Key (KEK)**, stored as a `0400` file under `storage/keys/` (outside version control and, ideally, outside the webroot).
 - A compromise of one app's KEK never exposes another app's files.
 
@@ -80,7 +80,7 @@ Secrets and protection, summarized:
 
 > **Platform assumptions.** The cryptographic posture assumes a **trusted operating system and host** (dedicated/VPS with a sane web server), and the `.htaccess`/`nginx` deny rules are defense-in-depth only. **Shared hosting for sensitive data is the least-secure supported option**: shared kernels and shared/weakly-configured web servers mean PHP code cannot fully guarantee isolation if the host is compromised. For anything sensitive, use the dedicated-infrastructure layout (docroot at `public/`, no shared hosting), and let an edge reverse proxy (Nginx/Apache `mod_evasive`/CDN) absorb traffic floods — not the application database.
 
-> **Hosting note:** this project targets shared hosting where sensitive paths cannot sit structurally outside the webroot. They are protected with deny-all `.htaccess` rules. That is a real mitigation, not a structural guarantee — run `bin/verify-deployment.php` after every deploy (see [Deployment](#deployment)).
+> **Hosting note:** this project is usable on shared hosting (typically for **low-sensitivity data**), where sensitive paths can't always sit structurally outside the webroot. There they are protected by deny-all `.htaccess` rules and best-effort permissions — a real mitigation, not a structural guarantee. Run `bin/verify-deployment.php` after every deploy, and for anything sensitive use the dedicated layout (docroot at `public/`) or a VPS, per the platform note above.
 
 ## Operations: filesystem permissions & the secrets contract
 
@@ -179,7 +179,7 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `404` | `not_found` | File not found **or not owned by this app** (IDOR protection). |
 | `405` | `invalid_request` | Method not allowed. |
 | `413` | `invalid_request` | Upload exceeds `MAX_UPLOAD_BYTES` (checked before encryption and again after). |
-| `429` | `rate_limited` | Per-app rate limit exceeded (also sends `Retry-After: 60`). |
+| `429` | `rate_limited` | Per-app rate limit exceeded (only when the opt-in per-app limiter is enabled; also sends `Retry-After: 60`). |
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
 

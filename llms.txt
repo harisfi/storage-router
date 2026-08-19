@@ -1,6 +1,6 @@
 # Storage Router
 
-> Multi-app, multi-provider **encrypted** storage router for PHP. A single service lets client apps upload, download, and delete files without knowing where they live. Content is encrypted at rest (libsodium envelope encryption) before touching Google Drive or local disk. Includes a REST API, an admin UI, per-app + admin-login rate limiting, versioned KEK rotation, encryptable backups, and a post-deploy security checker.
+> Multi-app, multi-provider **encrypted** storage router for PHP. A single service lets client apps upload, download, and delete files without knowing where they live. Content is encrypted at rest (libsodium envelope encryption) before touching Google Drive or local disk. Includes a REST API, an admin UI, edge-first traffic control with an opt-in per-app limiter and an admin-login throttle, versioned KEK rotation, encryptable backups, and a post-deploy security checker.
 
 Language: PHP (≥ 8.1) · no framework · zero runtime Composer packages
 Storage: SQLite metadata · Google Drive + local disk backends
@@ -21,7 +21,7 @@ Crypto: libsodium `crypto_secretstream_xchacha20poly1305` (streaming AEAD)
 
 - [README](README.md) — overview, architecture, security model, quickstart, config, API/CLI reference, deployment
 - [CONTRIBUTING](CONTRIBUTING.md) — how to contribute, code style, testing
-- [SECURITY](SECURITY.md) — vulnerability reporting policy
+- [SECURITY](SECURITY.md) — vulnerability reporting policy, security scope, **and explicit out-of-scope** (host compromise, shared-hosting misuse, memory scraping, credential theft)
 - [CHANGELOG](CHANGELOG.md) — release history
 - [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) — community standards
 - [LICENSE](LICENSE) — MIT

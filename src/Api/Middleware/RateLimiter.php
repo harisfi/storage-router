@@ -9,14 +9,13 @@ use App\Data\Repositories\RateLimitRepository;
 use App\Support\ErrorCatalog;
 
 /**
- * Per-app request rate limiting, enforced at the PHP layer via a fixed
- * 60-second window counter in SQLite. This is in addition to, not a
- * replacement for, rate limiting at the reverse-proxy layer (e.g. nginx
- * limit_req) where the host supports it — PHP-layer limiting alone can't
- * protect against raw connection-flood DoS the way a proxy in front of
- * PHP can, but it does stop one app from exhausting shared resources
- * (Drive API quota, disk I/O, DB writes) via excessive legitimate-looking
- * requests.
+ * OPT-IN per-app request rate limiting, enforced at the PHP layer via a fixed
+ * 60-second window counter in SQLite. It is OFF by default (uploadPerMinute/
+ * filesPerMinute > 0 to enable): with a limit <= 0 it returns immediately and
+ * performs NO database write. The primary DoS control is the EDGE reverse
+ * proxy (Nginx limit_req / CDN) — a PHP/SQLite layer cannot absorb raw
+ * connection floods. This in-app limiter exists only as an optional fairness
+ * tool for deployments with no proxy, at the cost of single-writer DB writes.
  */
 final class RateLimiter
 {

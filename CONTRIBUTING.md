@@ -6,7 +6,7 @@ Thanks for your interest in Storage Router. This project is small by design, and
 
 - **No framework, minimal dependencies.** Keep it that way — a tiny front controller and plain PHP classes. Add a package only when the cost of not adding it is clearly higher.
 - **Security is the product.** Encryption, key handling, and app isolation are the core value. Changes to them need review and tests.
-- **Stream everything.** Uploads/downloads must never buffer full files in PHP memory.
+- **Stream with bounded memory.** Uploads/downloads must never load a full file into **RAM**: use `php://temp` (5 MiB in-memory cap, then a temp file) and chunked reads, keeping memory flat regardless of file size.
 
 ## Getting started
 

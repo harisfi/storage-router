@@ -27,7 +27,7 @@ A multi-app, multi-provider **encrypted** storage router. A single PHP service l
 - **Backend selection** — least-used-space first, priority as a manual tie-breaker, with retry-on-failure to the next candidate.
 - **Admin UI** (`/admin/*`) — manage backends, apps, app↔backend assignments, a file browser, and an operational-error view.
 - **Versioned KEK rotation** — re-wrap DEKs without touching file content, and without ever breaking in-flight decryption.
-- **Per-app rate limiting**, a **per-IP login throttle** on the admin form, a **backup** tool (with passphrase encryption), and a **post-deploy security verification** tool.
+- **Edge-first traffic control** — Nginx `limit_req`/CDN for actual DoS; an **opt-in per-app rate limiter** (off by default so it doesn't load the single-writer DB) and a **per-IP throttle** on the admin login, plus a **backup** tool (with passphrase encryption) and a **post-deploy security verification** tool.
 - **Audit log** of admin actions, content-level access, and every operational failure.
 
 ## Architecture
@@ -69,7 +69,7 @@ flowchart TD
 Encryption is at the core, so it's worth being precise:
 
 - Each file gets a random **Data Encryption Key (DEK)**.
-- The file is encrypted with the DEK using a streaming AEAD construction (`crypto_secretstream_xchacha20poly1305`), which generates a fresh nonce per file and authenticates every chunk — tampering aborts the download rather than serving bad data.
+- The file is encrypted with the DEK using a streaming AEAD construction (`crypto_secretstream_xchacha20poly1305`), which generates a fresh nonce per file and authenticates every chunk — tampering aborts the stream rather than serving **unauthenticated** data. (Each chunk is authenticated before it's written out; on a mid-stream failure the connection aborts and the client detects truncation via the advertised `Content-Length`.)
 - The DEK is wrapped under a per-app **Key Encryption Key (KEK)**, stored as a `0400` file under `storage/keys/` (outside version control and, ideally, outside the webroot).
 - A compromise of one app's KEK never exposes another app's files.
 
@@ -89,7 +89,7 @@ Secrets and protection, summarized:
 
 > **Platform assumptions.** The cryptographic posture assumes a **trusted operating system and host** (dedicated/VPS with a sane web server), and the `.htaccess`/`nginx` deny rules are defense-in-depth only. **Shared hosting for sensitive data is the least-secure supported option**: shared kernels and shared/weakly-configured web servers mean PHP code cannot fully guarantee isolation if the host is compromised. For anything sensitive, use the dedicated-infrastructure layout (docroot at `public/`, no shared hosting), and let an edge reverse proxy (Nginx/Apache `mod_evasive`/CDN) absorb traffic floods — not the application database.
 
-> **Hosting note:** this project targets shared hosting where sensitive paths cannot sit structurally outside the webroot. They are protected with deny-all `.htaccess` rules. That is a real mitigation, not a structural guarantee — run `bin/verify-deployment.php` after every deploy (see [Deployment](#deployment)).
+> **Hosting note:** this project is usable on shared hosting (typically for **low-sensitivity data**), where sensitive paths can't always sit structurally outside the webroot. There they are protected by deny-all `.htaccess` rules and best-effort permissions — a real mitigation, not a structural guarantee. Run `bin/verify-deployment.php` after every deploy, and for anything sensitive use the dedicated layout (docroot at `public/`) or a VPS, per the platform note above.
 
 ## Operations: filesystem permissions & the secrets contract
 
@@ -188,7 +188,7 @@ Error responses use a small fixed catalog with HTTP status codes:
 | `404` | `not_found` | File not found **or not owned by this app** (IDOR protection). |
 | `405` | `invalid_request` | Method not allowed. |
 | `413` | `invalid_request` | Upload exceeds `MAX_UPLOAD_BYTES` (checked before encryption and again after). |
-| `429` | `rate_limited` | Per-app rate limit exceeded (also sends `Retry-After: 60`). |
+| `429` | `rate_limited` | Per-app rate limit exceeded (only when the opt-in per-app limiter is enabled; also sends `Retry-After: 60`). |
 | `507` | `no_storage_available` | No eligible backend could accept the file. |
 | `400`/`500` | `invalid_request` / `internal_error` | Malformed request / unexpected failure. |
 
@@ -406,7 +406,7 @@ Thanks for your interest in Storage Router. This project is small by design, and
 
 - **No framework, minimal dependencies.** Keep it that way — a tiny front controller and plain PHP classes. Add a package only when the cost of not adding it is clearly higher.
 - **Security is the product.** Encryption, key handling, and app isolation are the core value. Changes to them need review and tests.
-- **Stream everything.** Uploads/downloads must never buffer full files in PHP memory.
+- **Stream with bounded memory.** Uploads/downloads must never load a full file into **RAM**: use `php://temp` (5 MiB in-memory cap, then a temp file) and chunked reads, keeping memory flat regardless of file size.
 
 ## Getting started
 
@@ -478,6 +478,17 @@ Things we care about most, in priority order:
 4. **Auth hardening** — the per-IP admin-login throttle and per-app API rate limiting.
 5. **The local-backend capacity check** — the TOCTOU-safe transaction that enforces per-backend caps.
 6. **Path traversal / injection** — PDO-prepared statements, local-backend path validation, and verified access from outside the webroot (`.htaccess`/Nginx `deny` rules).
+
+## Out of scope
+
+This system protects data **at rest** on storage it writes to, and the app-isolation of the router itself. It does **not** protect against the underlying environment, and you should not rely on it for these cases — these are deployment/host responsibilities, not something this software can fix:
+
+1. **Compromised application host** — the router does **not** protect against an attacker who already has execution (or root/shell) access to the server it runs on. Once the host is compromised, in-memory keys, the SQLite DB, and `storage/` are all reachable regardless of this code.
+2. **Shared-hosting misconfigurations** — it does **not** protect against a web server that ignores the deny rules (e.g., Nginx without equivalent `deny` blocks, or Apache with `AllowOverride` off). Point the document root at `public/` and run `bin/verify-deployment.php`; if you cannot verify the guards, do not store sensitive data there.
+3. **Memory scraping on shared environments** — it does **not** guarantee protection against other tenants reading process memory on shared hosting. Keys are kept in memory during operations (`sodium_memzero` bounds their lifetime, but on shared hosting you must assume memory isolation is imperfect).
+4. **Social engineering / credential theft** — stolen admin passwords or API keys are **outside** the cryptographic threat model. The app cannot distinguish a legitimate holder from a thief; account/credential handling is the operator's responsibility.
+5. **Physical theft of an unencrypted backups/DB copy** — if you store a backup outside `--encrypt`, that copy is only as safe as wherever you put it (see README "Backup").
+6. **Denial of service / network floods** — raw traffic floods must be absorbed at the edge (Nginx `limit_req`/CDN); the in-app layer is not an anti-DoS substitute.
 
 ## Supported versions
 
@@ -567,6 +578,10 @@ All notable changes to this project are documented here. This project follows [S
 ## [Unreleased]
 
 - Initial public open-source release (MIT).
+
+### Changed
+
+- In-app per-app rate limiter is now **opt-in and off by default** (`RATE_LIMIT_*` = 0): it performs no SQLite writes unless enabled, and edge (Nginx `limit_req`/CDN) is documented as the primary traffic control.
 
 ### Added
 
