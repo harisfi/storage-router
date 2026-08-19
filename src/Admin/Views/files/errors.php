@@ -39,7 +39,7 @@ $baseQuery = [];
                 <td><time class="local-time" datetime="<?= $when ?>"><?= $when ?></time></td>
                 <td><?= $actor ?></td>
                 <td><span class="badge badge-error" data-tooltip="<?= $action ?>"><?= $actionLabel ?></span></td>
-                <td><code><?= $target ?></code></td>
+                <td><?= $target !== '' ? "<code>{$target}</code>" : '<span class="muted">—</span>' ?></td>
                 <td><code style="font-size:0.8rem;"><?= $metadataStr ?></code></td>
             </tr>
         <?php endforeach; ?>
