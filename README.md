@@ -78,6 +78,8 @@ Secrets and protection, summarized:
 1. **KEK/DB separation** — the KEK store and the SQLite DB must live in separate trust boundaries (separate backups, snapshots, permissions). If an attacker gets both together, everything is decryptable.
 2. **Capacity is enforced transactionally** — local-backend capacity is checked inside the same DB transaction that inserts the file row, avoiding a check-then-write race.
 
+> **Platform assumptions.** The cryptographic posture assumes a **trusted operating system and host** (dedicated/VPS with a sane web server), and the `.htaccess`/`nginx` deny rules are defense-in-depth only. **Shared hosting for sensitive data is the least-secure supported option**: shared kernels and shared/weakly-configured web servers mean PHP code cannot fully guarantee isolation if the host is compromised. For anything sensitive, use the dedicated-infrastructure layout (docroot at `public/`, no shared hosting), and let an edge reverse proxy (Nginx/Apache `mod_evasive`/CDN) absorb traffic floods — not the application database.
+
 > **Hosting note:** this project targets shared hosting where sensitive paths cannot sit structurally outside the webroot. They are protected with deny-all `.htaccess` rules. That is a real mitigation, not a structural guarantee — run `bin/verify-deployment.php` after every deploy (see [Deployment](#deployment)).
 
 ## Operations: filesystem permissions & the secrets contract
@@ -237,19 +239,35 @@ Then:
 
 > **Important:** `.htaccess` rules are only honored by Apache with `AllowOverride All`. They do **nothing** on **Nginx**, whose equivalent is explicit `location` blocks. If you use Nginx, or you cannot enable overrides, the structural fix is to point the document root at `public/` so `storage/`, `.env`, `src/` and `vendor/` are never web-reachable.
 
-**Nginx** — point `root` at `public/` and add explicit denies as defense-in-depth:
+**Nginx** — point `root` at `public/`, add explicit denies, and put traffic control at the **edge** rather than the primary database:
 
 ```nginx
-location / {
-    try_files $uri /index.php?$query_string;
-}
+# Connection-flood / abuse rate limit at the proxy (NOT the SQLite DB).
+# This is where true DoS protection belongs; the in-app per-app limiter is
+# a fairness layer, not a substitute for an edge gate.
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=upload:10m rate=2r/s;
 
-# Never serve these, even though they sit outside the docroot.
-location ~ ^/(\.env|storage|src|vendor)(/|$) {
-    deny all;
-}
-location ~ /\.(?!well-known).* {
-    deny all;   # hidden files (.env, .git, …) are never served
+server {
+    location / {
+        try_files $uri /index.php?$query_string;
+    }
+    location /api/upload {
+        limit_req zone=upload burst=5 nodelay;
+        try_files $uri /index.php?$query_string;
+    }
+    location ~ ^/api/ {
+        limit_req zone=api burst=20 nodelay;
+        try_files $uri /index.php?$query_string;
+    }
+
+    # Never serve these, even though they sit outside the docroot.
+    location ~ ^/(\.env|storage|src|vendor)(/|$) {
+        deny all;
+    }
+    location ~ /\.(?!well-known).* {
+        deny all;   # hidden files (.env, .git, …) are never served
+    }
 }
 ```
 
