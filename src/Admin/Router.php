@@ -17,6 +17,7 @@ use App\Data\Repositories\AppRepository;
 use App\Data\Repositories\AppStorageAccessRepository;
 use App\Data\Repositories\AuditLogRepository;
 use App\Data\Repositories\FileRepository;
+use App\Data\Repositories\RateLimitRepository;
 use App\Data\Repositories\StorageBackendRepository;
 use App\Storage\GoogleDriveClient;
 use App\Storage\GoogleDriveProvider;
@@ -77,7 +78,7 @@ final class Router
             'google_drive' => $googleDriveProvider,
         ]);
 
-        $this->auth = new AuthController($admins, $auditLog);
+        $this->auth = new AuthController($admins, $auditLog, new RateLimitRepository($this->pdo));
         $this->dashboard = new DashboardController($apps, $backends, $files, $auditLog);
         $this->googleOAuth = new GoogleOAuthController(
             $backends,

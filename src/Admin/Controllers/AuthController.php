@@ -6,14 +6,19 @@ namespace App\Admin\Controllers;
 
 use App\Data\Repositories\AdminRepository;
 use App\Data\Repositories\AuditLogRepository;
+use App\Data\Repositories\RateLimitRepository;
 use App\Support\Csrf;
 use App\Support\Session;
 
 final class AuthController
 {
+    /** Max login POSTs allowed per IP per 60-second window before throttling. */
+    private const LOGIN_MAX_PER_MINUTE = 3;
+
     public function __construct(
         private AdminRepository $admins,
-        private AuditLogRepository $auditLog
+        private AuditLogRepository $auditLog,
+        private RateLimitRepository $rateLimits
     ) {
     }
 
@@ -26,6 +31,14 @@ final class AuthController
     /** @param array<string, mixed> $post */
     public function handleLogin(array $post): void
     {
+        if (!$this->throttleLoginAttempt()) {
+            $this->auditLog->log('admin', $this->clientIp(), 'admin.login_failed', 'error', null, [
+                'reason' => 'rate_limited',
+            ]);
+            $this->showLoginForm('Too many login attempts. Please wait a minute and try again.');
+            return;
+        }
+
         if (!Csrf::verify(is_string($post['csrf_token'] ?? null) ? $post['csrf_token'] : null)) {
             $this->showLoginForm('Your session expired, please try again.');
             return;
@@ -84,5 +97,28 @@ final class AuthController
             header('Location: /admin/login');
             exit;
         }
+    }
+
+    /**
+     * Fixed-window per-IP throttle for the login form. Counts every POST
+     * (success or failure) against the client IP in the shared rate_limits
+     * table so a discarded account can be brute-forced only up to the
+     * per-window cap. Returns false once the cap is exceeded.
+     */
+    private function throttleLoginAttempt(): bool
+    {
+        $ip = $this->clientIp();
+        $windowStart = intdiv(time(), 60) * 60;
+
+        $count = $this->rateLimits->incrementAndGet('admin-login', $ip, $windowStart);
+
+        return $count <= self::LOGIN_MAX_PER_MINUTE;
+    }
+
+    private function clientIp(): string
+    {
+        // Only trust the real remote address — never a client-supplied
+        // X-Forwarded-For header on this shared-hosting layout.
+        return (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
     }
 }

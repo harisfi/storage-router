@@ -43,7 +43,7 @@ $baseQuery = [
         <thead>
             <tr>
                 <th>File</th>
-                <th>Migrate to</th>
+                <th>Actor</th>
             </tr>
         </thead>
         <tbody>
@@ -62,24 +62,26 @@ $baseQuery = [
                     <div class="cell-item"><span class="cell-label">ID</span> <code><?= $fid ?></code></div>
                     <div class="cell-item"><span class="cell-label">Mime</span> <?= $mime ?></div>
                     <div class="cell-item"><span class="cell-label">Size</span> <?= $size ?></div>
+                    <div class="cell-item"><span class="cell-label">Created</span> <time class="local-time" datetime="<?= $created ?>"><?= $created ?></time></div>
+                    <div class="cell-item"><span class="cell-label">Migrate to</span>
+                        <form class="inline-form" method="post" action="/admin/files/<?= $fid ?>/migrate">
+                            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                            <select name="target_storage_id" style="font-size: 0.7rem; width: 256px" aria-label="Target backend">
+                                <?php foreach ($backends as $b): ?>
+                                    <?php if ($b['id'] === $file['storage_id']) { continue; } ?>
+                                    <option value="<?= htmlspecialchars((string) $b['id'], ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= htmlspecialchars((string) $b['label'], ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" style="font-size: 0.7rem">Go</button>
+                        </form>
+                    </div>
+                </td>
+                <td>
                     <div class="cell-item"><span class="cell-label">App</span> <?= $appName ?></div>
                     <div class="cell-item"><span class="cell-label">Backend</span> <?= $backendLabel ?></div>
                     <div class="cell-item"><span class="cell-label">User</span> <?= $userId !== '' ? $userId : '<em>none</em>' ?></div>
-                    <div class="cell-item"><span class="cell-label">Created</span> <time class="local-time" datetime="<?= $created ?>"><?= $created ?></time></div>
-                </td>
-                <td>
-                    <form class="inline-form" method="post" action="/admin/files/<?= $fid ?>/migrate">
-                        <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                        <select name="target_storage_id" aria-label="Target backend">
-                            <?php foreach ($backends as $b): ?>
-                                <?php if ($b['id'] === $file['storage_id']) { continue; } ?>
-                                <option value="<?= htmlspecialchars((string) $b['id'], ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= htmlspecialchars((string) $b['label'], ENT_QUOTES, 'UTF-8') ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="submit">Go</button>
-                    </form>
                 </td>
             </tr>
         <?php endforeach; ?>
