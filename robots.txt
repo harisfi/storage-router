@@ -29,6 +29,6 @@ Allow: /
 User-agent: *
 Allow: /
 
-Disallow: /router-app/storage/
-Disallow: /router-app/.env
-Disallow: /router-app/src/
+Disallow: /storage-router/storage/
+Disallow: /storage-router/.env
+Disallow: /storage-router/src/

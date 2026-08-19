@@ -214,14 +214,14 @@ Sign in at `/admin/login`. From the dashboard you can:
 
 ## Deployment
 
-**Simplest option** — point your document root directly at `public/`. Then the deny-all `.htaccess` rules inside `router-app/` are purely defensive and the sensitive paths sit outside the docroot entirely.
+**Simplest option** — point your document root directly at `public/`. Then the deny-all `.htaccess` rules inside `storage-router/` are purely defensive and the sensitive paths sit outside the docroot entirely.
 
-**Shared hosting** — if the whole repo must live under your webroot (e.g. as `public_html/router-app/`), add a root `.htaccess` that routes every request into the app's `public/` folder:
+**Shared hosting** — if the whole repo must live under your webroot (e.g. as `public_html/storage-router/`), add a root `.htaccess` that routes every request into the app's `public/` folder:
 
 ```apache
 RewriteEngine On
-RewriteCond %{REQUEST_URI} !^/router-app/public/
-RewriteRule ^(.*)$ /router-app/public/$1 [L]
+RewriteCond %{REQUEST_URI} !^/storage-router/public/
+RewriteRule ^(.*)$ /storage-router/public/$1 [L]
 ```
 
 Then:
@@ -236,11 +236,11 @@ Then:
 
 Every sensitive path is protected by deny-all rules. The most important to confirm after any deploy:
 
-- `router-app/.env` (holds OAuth secret + session secret)
-- `router-app/storage/db/router.sqlite` (admin hashes, app API keys, wrapped DEKs)
-- `router-app/storage/keys/` (per-app encryption keys — a leak here + DB access defeats all encryption)
-- `router-app/storage/local-backends/` (ciphertext blobs)
-- `router-app/composer.json`, `router-app/src/...`, `router-app/vendor/autoload.php`
+- `storage-router/.env` (holds OAuth secret + session secret)
+- `storage-router/storage/db/router.sqlite` (admin hashes, app API keys, wrapped DEKs)
+- `storage-router/storage/keys/` (per-app encryption keys — a leak here + DB access defeats all encryption)
+- `storage-router/storage/local-backends/` (ciphertext blobs)
+- `storage-router/composer.json`, `storage-router/src/...`, `storage-router/vendor/autoload.php`
 
 Automate this check:
 
@@ -253,7 +253,7 @@ It makes real HTTP requests, asserts each sensitive path is blocked and the publ
 ## Project layout
 
 ```
-router-app/
+storage-router/
 ├── .env.example          # config template (never commit .env)
 ├── bin/                  # CLI tools (migrate, create-app, backup, ...)
 ├── public/

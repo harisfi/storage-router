@@ -44,13 +44,13 @@ $failures = 0;
 
 /** Paths that MUST return 403 (or at minimum, must NOT return 200 with real content). */
 $mustBeBlocked = [
-    '/router-app/.env',
-    '/router-app/composer.json',
-    '/router-app/storage/db/router.sqlite',
-    '/router-app/storage/keys/',
-    '/router-app/storage/local-backends/',
-    '/router-app/src/Api/Router.php',
-    '/router-app/vendor/autoload.php',
+    '/storage-router/.env',
+    '/storage-router/composer.json',
+    '/storage-router/storage/db/router.sqlite',
+    '/storage-router/storage/keys/',
+    '/storage-router/storage/local-backends/',
+    '/storage-router/src/Api/Router.php',
+    '/storage-router/vendor/autoload.php',
 ];
 
 /** Paths that must be reachable and behave as expected. */
