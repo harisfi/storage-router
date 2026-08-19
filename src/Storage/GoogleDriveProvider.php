@@ -24,6 +24,16 @@ final class GoogleDriveProvider implements StorageProviderInterface
      */
     public const OAUTH_SECRET_KEK_REF = 'system-google-oauth';
 
+    /**
+     * Top-level Drive folder that holds every managed blob, and the
+     * per-backend override key in provider_config. Files are organized as
+     * <root>/<storage_id>/<shard>/<random> to mirror the local provider.
+     */
+    public const ROOT_FOLDER_NAME = 'Storage Router';
+
+    /** Memoized per-request so the root folder isn't re-searched within one upload. */
+    private static ?string $rootFolderCache = null;
+
     public function __construct(
         private GoogleDriveClient $client,
         private KeyManager $keyManager,
@@ -43,7 +53,16 @@ final class GoogleDriveProvider implements StorageProviderInterface
         fwrite($buffer, $content);
         rewind($buffer);
 
-        $fileId = $this->client->uploadFile($accessToken, $buffer, $refHint, 'application/octet-stream', $size);
+        // Mirrors the local provider's layout, where the top folder is the
+        // storage backend's own id and the shard sits below it:
+        // <root>/<storage_id>/<shard>/<random>.
+        $rootFolder = $this->ensureRootFolder($accessToken, $backend);
+        $storageFolder = $this->client->ensureFolder($accessToken, (string) $backend['id'], $rootFolder);
+        $shard = substr($refHint, 0, 2);
+        $shardFolder = $this->client->ensureFolder($accessToken, $shard, $storageFolder);
+
+        $blobName = bin2hex(random_bytes(16)); // router-generated, not client-supplied
+        $fileId = $this->client->uploadFile($accessToken, $buffer, $blobName, 'application/octet-stream', $size, $shardFolder);
         fclose($buffer);
 
         return $fileId;
@@ -93,5 +112,18 @@ final class GoogleDriveProvider implements StorageProviderInterface
         sodium_memzero($refreshToken);
 
         return $tokens['access_token'];
+    }
+
+    /** Returns (creating if needed) the backend's top-level Drive folder id. */
+    private function ensureRootFolder(string $accessToken, array $backend): string
+    {
+        if (self::$rootFolderCache !== null) {
+            return self::$rootFolderCache;
+        }
+
+        $name = (string) ($backend['provider_config']['google_drive_root_folder'] ?? self::ROOT_FOLDER_NAME);
+        self::$rootFolderCache = $this->client->ensureFolder($accessToken, $name);
+
+        return self::$rootFolderCache;
     }
 }

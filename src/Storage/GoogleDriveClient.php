@@ -80,20 +80,24 @@ final class GoogleDriveClient
      *
      * @param resource $inputStream
      */
-    public function uploadFile(string $accessToken, $inputStream, string $filename, string $mimeType, int $sizeBytes): string
+    public function uploadFile(string $accessToken, $inputStream, string $filename, string $mimeType, int $sizeBytes, ?string $parentId = null): string
     {
+        $metadata = ['name' => $filename];
+        if ($parentId !== null) {
+            $metadata['parents'] = [$parentId];
+        }
         $initHeaders = [
             'Authorization: Bearer ' . $accessToken,
             'Content-Type: application/json; charset=UTF-8',
             'X-Upload-Content-Type: ' . $mimeType,
         ];
-        $metadata = json_encode(['name' => $filename], JSON_THROW_ON_ERROR);
+        $metadataJson = json_encode($metadata, JSON_THROW_ON_ERROR);
 
         $initResponse = $this->request(
             'POST',
             $this->driveUploadBaseUrl . '/files?uploadType=resumable',
             $initHeaders,
-            $metadata
+            $metadataJson
         );
 
         if ($initResponse['status'] !== 200) {
@@ -134,6 +138,72 @@ final class GoogleDriveClient
         if ($response['status'] !== 200) {
             throw new RuntimeException('Failed to download file from Drive: HTTP ' . $response['status']);
         }
+    }
+
+    /**
+     * Locates a folder by name (optionally under a parent), ignoring
+     * trashed ones. Returns null when it does not exist.
+     *
+     * @param string $name simple name; only safe characters are expected
+     */
+    public function findFolder(string $accessToken, string $name, ?string $parentId = null): ?string
+    {
+        $q = "name = '{$name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+        if ($parentId !== null) {
+            $q .= " and '{$parentId}' in parents";
+        }
+
+        $url = $this->driveApiBaseUrl . '/files?' . http_build_query([
+            'q' => $q,
+            'fields' => 'files(id)',
+            'pageSize' => 1,
+            'spaces' => 'drive',
+        ]);
+        $response = $this->request('GET', $url, ['Authorization: Bearer ' . $accessToken]);
+
+        if ($response['status'] !== 200) {
+            throw new RuntimeException('Failed to search Drive folders: HTTP ' . $response['status']);
+        }
+
+        $body = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
+        $files = $body['files'] ?? [];
+
+        return isset($files[0]['id']) ? (string) $files[0]['id'] : null;
+    }
+
+    public function createFolder(string $accessToken, string $name, ?string $parentId = null): string
+    {
+        $metadata = [
+            'name' => $name,
+            'mimeType' => 'application/vnd.google-apps.folder',
+        ];
+        if ($parentId !== null) {
+            $metadata['parents'] = [$parentId];
+        }
+
+        $url = $this->driveApiBaseUrl . '/files?fields=id';
+        $response = $this->request('POST', $url, [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json; charset=UTF-8',
+        ], json_encode($metadata, JSON_THROW_ON_ERROR));
+
+        if ($response['status'] !== 200) {
+            throw new RuntimeException('Failed to create Drive folder: HTTP ' . $response['status']);
+        }
+
+        $body = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
+        if (!isset($body['id'])) {
+            throw new RuntimeException('Drive folder response did not include an id.');
+        }
+
+        return (string) $body['id'];
+    }
+
+    /** Finds a folder by name, creating it if it does not exist. */
+    public function ensureFolder(string $accessToken, string $name, ?string $parentId = null): string
+    {
+        return $this->findFolder($accessToken, $name, $parentId)
+            ?? $this->createFolder($accessToken, $name, $parentId);
     }
 
     public function deleteFile(string $accessToken, string $fileId): void
