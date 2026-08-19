@@ -82,15 +82,31 @@ final class FileRepositoryTest extends DatabaseTestCase
         $this->assertSame(350, $stats['bytes']);
     }
 
-    public function testBackendByteAccounting(): void
+public function testBackendByteAccounting(): void
     {
-        $this->createFile(['size_bytes' => 100]);
-        $this->createFile(['size_bytes' => 300]);
+        $this->createFile(['storage_id' => 'backend-1', 'size_bytes' => 100]);
+        $this->createFile(['storage_id' => 'backend-1', 'size_bytes' => 300]);
         $repo = new FileRepository($this->pdo);
 
         $this->assertSame(400, $repo->sumActiveBytesForStorage('backend-1'));
         $this->assertSame(2, $repo->countActiveForStorage('backend-1'));
         $this->assertSame(2, $repo->countAllForStorage('backend-1'));
+    }
+
+    public function testCountAndSumAllActiveAcrossApps(): void
+    {
+        $this->createFile(['app_id' => 'app-1', 'size_bytes' => 100]);
+        $this->createFile(['app_id' => 'app-1', 'size_bytes' => 200]);
+        $this->createFile(['app_id' => 'app-2', 'size_bytes' => 400]);
+        $repo = new FileRepository($this->pdo);
+
+        $this->assertSame(3, $repo->countAllActive());
+        $this->assertSame(700, $repo->sumAllActiveBytes());
+
+        // Soft-deleting excludes the row from both aggregates.
+        $repo->markDeleted((string) $this->lastFileId);
+        $this->assertSame(2, $repo->countAllActive());
+        $this->assertSame(300, $repo->sumAllActiveBytes());
     }
 
     public function testCountForAdminRespectsFilters(): void

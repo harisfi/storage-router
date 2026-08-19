@@ -7,6 +7,7 @@ namespace App\Admin;
 use App\Admin\Controllers\AppController;
 use App\Admin\Controllers\AssignmentController;
 use App\Admin\Controllers\AuthController;
+use App\Admin\Controllers\DashboardController;
 use App\Admin\Controllers\FileBrowserController;
 use App\Admin\Controllers\GoogleOAuthController;
 use App\Admin\Controllers\StorageBackendController;
@@ -21,7 +22,6 @@ use App\Storage\GoogleDriveClient;
 use App\Storage\GoogleDriveProvider;
 use App\Storage\LocalProvider;
 use App\Storage\StorageProviderRegistry;
-use App\Support\Csrf;
 use App\Support\Session;
 use PDO;
 
@@ -35,6 +35,7 @@ use PDO;
 final class Router
 {
     private AuthController $auth;
+    private DashboardController $dashboard;
     private GoogleOAuthController $googleOAuth;
     private StorageBackendController $storageBackends;
     private AppController $appsController;
@@ -77,6 +78,7 @@ final class Router
         ]);
 
         $this->auth = new AuthController($admins, $auditLog);
+        $this->dashboard = new DashboardController($apps, $backends, $files, $auditLog);
         $this->googleOAuth = new GoogleOAuthController(
             $backends,
             new GoogleDriveClient($googleOauthTokenUrl, $googleUserInfoUrl),
@@ -201,8 +203,7 @@ final class Router
         // --- dashboard ---
         if ($path === '/admin') {
             $username = (string) ($_SESSION['admin_username'] ?? '');
-            $csrfToken = Csrf::token();
-            require __DIR__ . '/Views/dashboard.php';
+            $this->dashboard->show($username);
             return;
         }
 

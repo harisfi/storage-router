@@ -175,6 +175,20 @@ final class FileRepository
         return ['count' => (int) $row['cnt'], 'bytes' => (int) $row['total']];
     }
 
+    /** Count of all active files, across every app — used by the dashboard. */
+    public function countAllActive(): int
+    {
+        return (int) $this->pdo->query("SELECT COUNT(*) FROM files WHERE status = 'active'")->fetchColumn();
+    }
+
+    /** Sum of all active file sizes, across every app — used by the dashboard. */
+    public function sumAllActiveBytes(): int
+    {
+        return (int) $this->pdo->query(
+            "SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE status = 'active'"
+        )->fetchColumn();
+    }
+
     /** Count of active files matching the same filters as listForAdmin(). */
     public function countForAdmin(array $filters = []): int
     {
