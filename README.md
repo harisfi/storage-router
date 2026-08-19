@@ -251,10 +251,20 @@ router-app/
 
 `bin/backup.php` produces a consistent snapshot: the SQLite DB via `VACUUM INTO` (safe on a live database) **plus** every current and historical KEK file. Back both up together — either half alone is useless without the other. Store them separately, since together they can decrypt everything.
 
+## Testing
+
+The test suite runs on PHPUnit against an in-memory SQLite, so it never touches real `storage/` data:
+
+```bash
+composer install        # installs dev dependencies (phpunit)
+vendor/bin/phpunit
+```
+
+Coverage is focused on the highest-stakes code: `Crypto/` (encryption), `Storage/` (selection), the rate limiter, migrations, and repository app-isolation (IDOR) behavior. CI runs the suite on PHP 8.1–8.3. See [CONTRIBUTING](CONTRIBUTING.md) for how to add tests.
+
 ## Roadmap / known limits
 
 - **API surface** — currently upload / download / delete. Listing, overwrite (`PUT`), and metadata endpoints are not implemented.
-- **Tests** — the `tests/` suite is a stub; real coverage is a planned contribution (see [CONTRIBUTING](CONTRIBUTING.md)).
 - **Quota refresh** — manual only; no scheduled/cron refresh.
 - **KEK deletion** — deliberately manual, after rotation, requiring explicit admin confirmation.
 - **Providers** — Google Drive and local disk only. S3/others can be added behind `StorageProviderInterface`.

@@ -54,21 +54,34 @@ final class EnvelopeEncryptor
         $hashContext = hash_init('sha256');
         $totalBytes = 0;
         $wroteAnyChunk = false;
+        $chunk = $this->readExactly($inputStream, self::CHUNK_SIZE);
 
         while (true) {
-            $chunk = $this->readExactly($inputStream, self::CHUNK_SIZE);
-            $chunkLen = strlen($chunk);
-            $isLast = $chunkLen < self::CHUNK_SIZE; // short read = genuinely exhausted
-
-            if ($chunkLen === 0 && $wroteAnyChunk) {
-                // Nothing left and we've already written at least one
-                // chunk (which, if isLast was true then, already carried
-                // TAG_FINAL) — nothing more to do.
+            if ($chunk === '' && $wroteAnyChunk) {
+                // Exhausted after having written at least one chunk — done.
                 break;
             }
 
+            // Decide whether THIS chunk is the final one before writing it.
+            // A short read (< CHUNK_SIZE) means the stream is genuinely
+            // exhausted, so the chunk is final. A full chunk can still be
+            // final if nothing follows it — peek ahead to find out. Without
+            // this lookahead, a file whose size is an exact multiple of
+            // CHUNK_SIZE would never receive a FINAL tag and could never
+            // be decrypted (decryption requires the FINAL tag to terminate).
+            if ($chunk === '' && !$wroteAnyChunk) {
+                // Empty input: emit one empty FINAL chunk so decryption
+                // has a terminating tag.
+                $isLast = true;
+            } elseif (strlen($chunk) < self::CHUNK_SIZE) {
+                $isLast = true;
+            } else {
+                $next = $this->readExactly($inputStream, self::CHUNK_SIZE);
+                $isLast = ($next === '');
+            }
+
             hash_update($hashContext, $chunk);
-            $totalBytes += $chunkLen;
+            $totalBytes += strlen($chunk);
 
             $tag = $isLast
                 ? SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL
@@ -81,6 +94,8 @@ final class EnvelopeEncryptor
             if ($isLast) {
                 break;
             }
+
+            $chunk = $next;
         }
 
         return [
@@ -97,8 +112,8 @@ final class EnvelopeEncryptor
      * AEAD authentication is checked per chunk BEFORE that chunk is written
      * to $outputStream — so if the ciphertext was tampered with or
      * corrupted, this throws before any corrupted plaintext is ever
-* forwarded downstream, rather than after.
- *
+     * forwarded downstream, rather than after.
+     *
      * @param resource $inputStream
      * @param resource $outputStream
      * @return array{size_bytes: int, checksum: string}
